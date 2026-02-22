@@ -1150,8 +1150,11 @@ tfoot td {
                     }
                     // Mapping kolom sesuai urutan tabel Anda
                     function parseTanggalToYMD(str) {
-                        // Contoh input: "Minggu, 01-Feb-2026" atau "Senin, 12-Des-2025"
+                        // Contoh input: "Minggu, 01-Feb-2026" atau "Senin, 12-Des-2025" atau sudah YYYY-MM-DD
                         if (!str) return null;
+                        str = str.trim();
+                        // Jika sudah format YYYY-MM-DD
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
                         // Ambil bagian tanggal saja
                         let t = str.split(',').pop().trim(); // "01-Feb-2026"
                         // Ubah nama bulan ke angka
@@ -1162,8 +1165,12 @@ tfoot td {
                         const m = t.match(/(\d{2})-([A-Za-z]+)-(\d{4})/);
                         if (!m) return null;
                         const [_, dd, mon, yyyy] = m;
-                        const mm = bulanMap[mon.slice(0,3)] || '01';
-                        return `${yyyy}-${mm}-${dd}`;
+                        const mm = bulanMap[mon.slice(0,3)] || null;
+                        if (!mm) return null;
+                        // Validasi tanggal
+                        const ymd = `${yyyy}-${mm}-${dd}`;
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+                        return ymd;
                     }
                     const dataToSend = rows.map(row => {
                         const cells = row.querySelectorAll('td');
@@ -1181,7 +1188,7 @@ tfoot td {
                         };
                     });
                     // Filter data yang punya tanggal
-                    const filteredData = dataToSend.filter(d => d.tanggal);
+                    const filteredData = dataToSend.filter(d => d.tanggal && /^\d{4}-\d{2}-\d{2}$/.test(d.tanggal));
                     if (filteredData.length === 0) {
                         showToast('Tidak ada data valid untuk dikirim!', 'warning');
                         return;
