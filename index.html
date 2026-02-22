@@ -1174,17 +1174,28 @@ tfoot td {
                     }
                     const dataToSend = rows.map(row => {
                         const cells = row.querySelectorAll('td');
+                        // Ambil tanggal dari kolom pertama (format ke YYYY-MM-DD)
+                        const tanggal = parseTanggalToYMD(cells[0]?.innerText.trim());
+                        // Ambil data dari dataStore (karena field boolean/alasan tidak ada di tabel)
+                        const store = window.dataStore || {};
+                        const rawDate = cells[0]?.innerText.trim();
+                        // Cari key di dataStore yang cocok dengan tanggal (format YYYY-MM-DD)
+                        let key = null;
+                        for (const k in store) {
+                            if (formatDate(k) === rawDate || k === tanggal) { key = k; break; }
+                        }
+                        const d = key ? store[key] : {};
                         return {
-                            tanggal: parseTanggalToYMD(cells[0]?.innerText.trim()),
-                            luasPanen: parseFloat(cells[1]?.innerText) || 0,
-                            lahanBera: parseFloat(cells[2]?.innerText) || 0,
-                            lahanOlahTanah: parseFloat(cells[3]?.innerText) || 0,
-                            luasTambahTanam: parseFloat(cells[4]?.innerText) || 0,
-                            gagalPanen: (cells[5]?.innerText.trim().toLowerCase() === 'ya'),
-                            alasanGagalPanen: cells[6]?.innerText.trim() || null,
-                            tundaTanam: (cells[7]?.innerText.trim().toLowerCase() === 'ya'),
-                            alasanTundaTanam: cells[8]?.innerText.trim() || null,
-                            tanggalTanamBaru: parseTanggalToYMD(cells[9]?.innerText.trim())
+                            tanggal,
+                            luasPanen: d.luasPanen || 0,
+                            lahanBera: d.lahanBera || 0,
+                            lahanOlahTanah: d.lahanOlahTanah || 0,
+                            luasTambahTanam: d.luasTambahTanam || 0,
+                            gagalPanen: d.gagalPanen || false,
+                            alasanGagalPanen: d.alasanGagalPanen || null,
+                            tundaTanam: d.tundaTanam || false,
+                            alasanTundaTanam: d.alasanTundaTanam || null,
+                            tanggalTanamBaru: d.tanggalTanamBaru || null
                         };
                     });
                     // Filter data yang punya tanggal
