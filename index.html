@@ -1988,16 +1988,15 @@ document.addEventListener('DOMContentLoaded', function(){
                                     .insert([
                                         {
                                             tanggal,
-                                            luas_panen: luasPanen,
-                                            lahan_bera: lahanBera,
-                                            lahan_olah_tanah: lahanOlahTanah,
-                                            luas_tambah_tanam: luasTambahTanam,
-                                            gagal_panen: gagalPanen,
-                                            tunda_tanam: tundaTanam,
-                                            tanggal_tanam_baru: tanggalTanamBaru || null,
-                                            alasan_gagal_panen: alasanGagalPanen || null,
-                                            alasan_tunda_tanam: alasanTundaTanam || null,
-                                            timestamp: new Date().toISOString()
+                                            luasPanen,
+                                            lahanBera,
+                                            lahanOlahTanah,
+                                            luasTambahTanam,
+                                            gagalPanen,
+                                            tundaTanam,
+                                            tanggalTanamBaru: tanggalTanamBaru || null,
+                                            alasanGagalPanen: alasanGagalPanen || null,
+                                            alasanTundaTanam: alasanTundaTanam || null
                                         }
                                     ]);
                                 if (error) {
