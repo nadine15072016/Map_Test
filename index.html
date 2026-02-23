@@ -38,7 +38,21 @@
             });
         });
         // Filter hanya data dengan tanggal valid
-        return data.filter(d => d.tanggal);
+        // Hanya kirim baris dengan tanggal valid dan minimal satu nilai numerik
+        return data.filter(d => {
+            if (!d.tanggal) return false;
+            // Cek minimal satu kolom numerik tidak null
+            return (
+                d.panen_real !== null ||
+                d.panen_prediksi !== null ||
+                d.bera_real !== null ||
+                d.bera_prediksi !== null ||
+                d.olah_real !== null ||
+                d.olah_prediksi !== null ||
+                d.tanam_real !== null ||
+                d.tanam_prediksi !== null
+            );
+        });
     }
     // Event listener tombol kirim ke Supabase
     document.addEventListener('DOMContentLoaded', function() {
@@ -55,6 +69,12 @@
     function sendToSupabase(data) {
         const url = 'https://rvibhulolxrbhdmjtuxk.supabase.co/rest/v1/laporan_padi_sawah';
         const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2aWJodWxvbHhyYmhkbWp0dXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NjcyNzIsImV4cCI6MjA4NzM0MzI3Mn0.ds01XK_vit8R5Ycc6h9gykAX7TTnUzxnIuFwz_Rd5fE';
+        const filteredData = Array.isArray(data) ? data : [];
+        console.log('Data yang akan dikirim ke Supabase:', filteredData);
+        if (filteredData.length === 0) {
+            showToast('Tidak ada data valid yang bisa dikirim ke Supabase.', 'warning');
+            return;
+        }
         fetch(url, {
             method: 'POST',
             headers: {
