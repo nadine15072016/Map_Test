@@ -102,6 +102,18 @@
         });
     }
     </script>
+    <script>
+    // Wiring tombol sinkronisasi data online
+    document.addEventListener('DOMContentLoaded', function() {
+        var syncBtn = document.getElementById('sendSupabaseBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', function() {
+                var data = getTableData();
+                sendToSupabase(data);
+            });
+        }
+    });
+    </script>
 <!DOCTYPE html>
 <html lang="id">
 <head>
