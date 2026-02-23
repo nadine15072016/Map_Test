@@ -35,23 +35,35 @@
     });
     // Fungsi placeholder kirim ke Supabase
     function sendToSupabase(data) {
-        // Kirim data ke Supabase
         const url = 'https://rvibhulolxrbhdmjtuxk.supabase.co/rest/v1/laporan_padi_sawah';
         const apiKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2aWJodWxvbHhyYmhkbWp0dXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NjcyNzIsImV4cCI6MjA4NzM0MzI3Mn0.ds01XK_vit8R5Ycc6h9gykAX7TTnUzxnIuFwz_Rd5fE';
-        // Kirim semua data sekaligus (bulk insert)
         fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'apikey': apiKey,
-                'Authorization': 'Bearer ' + apiKey
+                'Authorization': 'Bearer ' + apiKey,
+                'Prefer': 'return=representation' // agar Supabase mengembalikan data yang diinsert
             },
             body: JSON.stringify(data)
         })
-        .then(res => res.json())
-        .then(result => {
-            showToast('Data berhasil dikirim ke Supabase!', 'success');
-            console.log('Supabase result:', result);
+        .then(async res => {
+            let result;
+            try {
+                result = await res.json();
+            } catch (e) {
+                result = {};
+            }
+            console.log('Supabase response:', res.status, result);
+            if (!res.ok || result && result.code) {
+                // Jika Supabase mengembalikan error
+                let msg = (result && result.message) ? result.message : 'Gagal insert ke Supabase.';
+                showToast('Gagal kirim ke Supabase: ' + msg, 'error');
+            } else if (Array.isArray(result) && result.length > 0) {
+                showToast('Data berhasil dikirim ke Supabase!', 'success');
+            } else {
+                showToast('Tidak ada data yang masuk ke Supabase.', 'warning');
+            }
         })
         .catch(err => {
             showToast('Gagal kirim ke Supabase: ' + err, 'error');
