@@ -178,6 +178,24 @@ function addSurvey(data) {
             justify-content: center;
             color: #2e7d32;
         }
+    /* Style untuk dropdown menu ekspor */
+    #menu-ekspor button {
+        transition: background-color 0.2s ease, transform 0.1s ease;
+        cursor: pointer;
+        border-radius: 5px;
+        margin: 1px 3px;
+        width: calc(100% - 6px) !important;
+    }
+    #menu-ekspor button:hover {
+        background-color: #f5f5f5 !important;
+        transform: translateX(2px);
+    }
+    #menu-ekspor button:active {
+        transform: translateX(2px) scale(0.98);
+    }
+    #menu-ekspor hr {
+        margin: 4px 6px !important;
+    }
     body {
         font-family: 'Segoe UI', Arial, sans-serif;
         margin: 0;
@@ -479,20 +497,33 @@ function addSurvey(data) {
             </label>
             <label style="font-size:12px;">Foto Lokasi
                 <input type="file" id="foto" accept="image/*" style="font-size:12px;">
-                <small style="color:#2a7a3a;display:block;font-size:11px;">Tips: Jika muncul pilihan, pilih "Galeri" untuk mencari foto di HP Anda.</small>
-                <button type="button" id="btn-kamera" style="margin-top:6px;margin-bottom:2px;padding:6px 12px;font-size:11px;background:#2a7a3a;color:#fff;border:none;border-radius:5px;cursor:pointer;">Ambil Foto Kamera</button>
+                <small style="color:#666;display:block;font-size:10.5px;margin-top:3px;">
+                    <strong style="color:#2a7a3a;">📱 Agar koordinat terbaca otomatis:</strong><br>
+                    • Aktifkan GPS/Lokasi di HP sebelum ambil foto<br>
+                    • Beri izin lokasi ke aplikasi Kamera<br>
+                    • Ambil foto langsung dari kamera (jangan edit dulu)<br>
+                    • Atau: klik manual di peta jika foto tidak punya GPS
+                </small>
+                <button type="button" id="btn-kamera" style="margin-top:6px;margin-bottom:2px;padding:6px 12px;font-size:11px;background:#2a7a3a;color:#fff;border:none;border-radius:5px;cursor:pointer;">📷 Ambil Foto Kamera</button>
                 <input type="file" id="kamera-capture" accept="image/*" capture="environment" style="display:none;font-size:12px;">
-                <small id="geotag-info" style="color:#2a7a3a;display:none;font-size:11px;">Koordinat dari foto terdeteksi & otomatis diisi.</small>
+                <small id="geotag-info" style="color:#2a7a3a;display:none;font-size:11px;font-weight:600;margin-top:4px;">✅ Koordinat dari foto berhasil dibaca!</small>
+                <small id="geotag-warning" style="color:#e65100;display:none;font-size:11px;margin-top:4px;">⚠️ Foto tidak memiliki data GPS. Silakan klik di peta untuk menentukan lokasi.</small>
             </label>
             <div class="form-actions">
                 <button type="submit" style="font-size:12px;">Simpan</button>
                 <div class="dropdown-ekspor" style="display:inline-block;position:relative;">
                     <button type="button" id="btn-ekspor-group" style="font-size:12px;padding:2px 16px;min-width:120px;">Ekspor Data ▼</button>
-                    <div id="menu-ekspor" style="display:none;position:absolute;z-index:10;min-width:160px;background:#fff;border:1px solid #bbb;border-radius:8px;box-shadow:0 2px 8px #0002;top:110%;left:0;">
-                        <button type="button" id="ekspor-kml" style="width:100%;text-align:left;padding:8px 16px;font-size:12px;border:none;background:none;">KML</button>
-                        <button type="button" id="ekspor-excel" style="width:100%;text-align:left;padding:8px 16px;font-size:12px;border:none;background:none;">Excel</button>
+                    <div id="menu-ekspor" style="display:none;position:absolute;z-index:10;min-width:165px;background:#fff;border:1px solid #ccc;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.12);top:110%;left:0;padding:4px 0;">
+                        <div style="padding:5px 10px;font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid #eee;margin-bottom:2px;">Ekspor</div>
+                        <button type="button" id="ekspor-kml" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#253a2a;font-weight:500;">📍 KML</button>
+                        <button type="button" id="ekspor-excel" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#253a2a;font-weight:500;">📊 Excel</button>
+                        <hr style="margin:4px 6px;border:0;border-top:1px solid #eee;">
+                        <div style="padding:5px 10px;font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid #eee;margin-bottom:2px;">Data</div>
+                        <button type="button" id="backup-data" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#2e7d32;font-weight:600;">💾 Backup</button>
+                        <button type="button" id="restore-data" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#1976d2;font-weight:600;">📥 Restore</button>
                     </div>
                 </div>
+                <input type="file" id="restore-file-input" accept=".json" style="display:none;">
             </div>
         </form>
             <button type="button" id="cetak-laporan" style="margin-top:12px;font-size:12px;padding:2px 16px;min-width:120px;background:#8cbf7e;color:#253a2a;border-radius:8px;border:1px solid #a3a97a;">
@@ -550,7 +581,7 @@ function addSurvey(data) {
     </div>
         <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
         <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -565,6 +596,43 @@ function dmsToDecimal(dms, ref) {
     return dec;
 }
 function getGpsFromFile(file, callback) {
+    console.log('📷 Membaca EXIF data dari foto:', file.name);
+    
+    // Method 1: Gunakan EXIF.getData (lebih kompatibel dengan mobile)
+    EXIF.getData(file, function() {
+        try {
+            var lat = null, lng = null;
+            var latData = EXIF.getTag(this, 'GPSLatitude');
+            var latRef = EXIF.getTag(this, 'GPSLatitudeRef');
+            var lngData = EXIF.getTag(this, 'GPSLongitude');
+            var lngRef = EXIF.getTag(this, 'GPSLongitudeRef');
+            
+            console.log('📍 GPS Data ditemukan:', {
+                lat: latData,
+                latRef: latRef,
+                lng: lngData,
+                lngRef: lngRef
+            });
+            
+            if(latData && lngData && latRef && lngRef) {
+                lat = dmsToDecimal(latData, latRef);
+                lng = dmsToDecimal(lngData, lngRef);
+                console.log('✅ Koordinat berhasil dikonversi:', lat, lng);
+            } else {
+                console.warn('⚠️ Data GPS tidak lengkap atau tidak ditemukan di foto');
+            }
+            callback({lat: lat, lng: lng});
+        } catch (err) {
+            console.error('❌ Error membaca EXIF:', err);
+            // Fallback ke method lama jika method baru gagal
+            tryReadExifFallback(file, callback);
+        }
+    });
+}
+
+// Fallback method untuk membaca EXIF (method lama)
+function tryReadExifFallback(file, callback) {
+    console.log('🔄 Mencoba method fallback untuk membaca EXIF...');
     var reader = new FileReader();
     reader.onload = function(e) {
         var arrayBuffer = e.target.result;
@@ -574,11 +642,19 @@ function getGpsFromFile(file, callback) {
             if(tags.GPSLatitude && tags.GPSLongitude && tags.GPSLatitudeRef && tags.GPSLongitudeRef) {
                 lat = dmsToDecimal(tags.GPSLatitude, tags.GPSLatitudeRef);
                 lng = dmsToDecimal(tags.GPSLongitude, tags.GPSLongitudeRef);
+                console.log('✅ Fallback berhasil - koordinat ditemukan:', lat, lng);
+            } else {
+                console.warn('⚠️ Fallback - GPS data tidak ditemukan di foto');
             }
             callback({lat: lat, lng: lng});
         } catch (err) {
+            console.error('❌ Fallback juga gagal:', err);
             callback({lat: null, lng: null});
         }
+    };
+    reader.onerror = function() {
+        console.error('❌ Error membaca file');
+        callback({lat: null, lng: null});
     };
     reader.readAsArrayBuffer(file);
 }
@@ -790,6 +866,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     document.getElementById('ekspor-kml').onclick = eksporLokasiKML;
     document.getElementById('ekspor-excel').onclick = eksporLokasiExcel;
+    document.getElementById('backup-data').onclick = backupData;
+    document.getElementById('restore-data').onclick = function() {
+        document.getElementById('restore-file-input').click();
+    };
+    document.getElementById('restore-file-input').addEventListener('change', restoreData);
     document.getElementById('cetak-laporan').onclick = function() {
         window.print();
     };
@@ -919,9 +1000,17 @@ function handleFormSubmit(e) {
 function handleFotoChange(e) {
     var file = this.files && this.files[0];
     if(!file) return;
+    
+    // Reset pesan
+    document.getElementById('geotag-info').style.display = 'none';
+    document.getElementById('geotag-warning').style.display = 'none';
+    
+    console.log('📷 Memproses foto:', file.name, 'ukuran:', (file.size/1024).toFixed(2) + 'KB');
+    
     processFotoGeotag(file, function(res) {
         if(res.lat && res.lng) {
             // Jika foto punya lokasi, tampilkan marker foto dan isi input koordinat
+            console.log('✅ Sukses! Koordinat ditemukan:', res.lat, res.lng);
             document.getElementById('koordinat').value = res.lat + ',' + res.lng;
             if(res.foto) {
                 tampilkanFotoDiPeta(parseFloat(res.lat), parseFloat(res.lng), res.foto);
@@ -929,11 +1018,16 @@ function handleFotoChange(e) {
                 renderSemuaMarkerPeta();
                 map.setView([parseFloat(res.lat),parseFloat(res.lng)], 17);
             }
-            document.getElementById('geotag-info').style.display = '';
+            document.getElementById('geotag-info').style.display = 'block';
         } else {
-            // Jika tidak ada lokasi di foto, kosongkan input koordinat
-            document.getElementById('koordinat').value = '';
-            document.getElementById('geotag-info').style.display = 'none';
+            // Jika tidak ada lokasi di foto
+            console.warn('⚠️ Koordinat GPS tidak ditemukan di foto');
+            console.log('💡 Solusi: Ambil foto baru dengan GPS aktif atau klik manual di peta');
+            // Jangan kosongkan koordinat jika sudah ada (user mungkin sudah klik di peta)
+            if(!document.getElementById('koordinat').value) {
+                document.getElementById('koordinat').value = '';
+            }
+            document.getElementById('geotag-warning').style.display = 'block';
         }
     });
 }
@@ -965,8 +1059,24 @@ function processFotoGeotag(file, callback) {
             // Kompres ke jpeg kualitas 0.6
             var base64 = canvas.toDataURL('image/jpeg', 0.6);
             getGpsFromFile(file, function(gps) {
+                // Tampilkan notifikasi jika koordinat tidak terbaca
+                if (!gps.lat || !gps.lng) {
+                    console.log('ℹ️ Foto tidak memiliki data GPS atau data GPS tidak dapat dibaca');
+                    console.log('💡 Tips: Pastikan GPS aktif saat mengambil foto dan foto belum diedit oleh aplikasi lain');
+                }
                 // Data gambar akan diteruskan ke IndexedDB melalui callback
                 callback({foto: base64, lat: gps.lat, lng: gps.lng});
+            });
+        };
+        img.onerror = function() {
+            console.warn('⚠️ Error loading image, menggunakan foto asli');
+            // Jika gagal, tetap pakai base64 asli
+            getGpsFromFile(file, function(gps) {
+                if (!gps.lat || !gps.lng) {
+                    console.log('ℹ️ Foto tidak memiliki data GPS');
+                }
+                // Data gambar akan diteruskan ke IndexedDB melalui callback
+                callback({foto: e.target.result, lat: gps.lat, lng: gps.lng});
             });
         };
         img.onerror = function() {
@@ -1235,7 +1345,7 @@ function hapusSurvey(idx) {
 function eksporLokasiKML() {
     getAllSurvey().then(function(dataSurveyNow) {
         let kml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n`;
-        kml += `<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n<Document>\n`;
+        kml += `<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n`;
         dataSurveyNow.forEach(function(item) {
             if(item.x && item.y) {
                 kml += `<Placemark>\n`;
@@ -1271,6 +1381,142 @@ function eksporLokasiExcel() {
         XLSX.utils.book_append_sheet(wb, ws, 'DataLokasi');
         XLSX.writeFile(wb, 'data_lokasi.xlsx');
     });
+}
+
+// Backup Data
+function backupData() {
+    getAllSurvey().then(function(dataSurveyNow) {
+        if (dataSurveyNow.length === 0) {
+            alert('Tidak ada data untuk dibackup!');
+            return;
+        }
+        
+        // Buat object backup dengan metadata
+        const backupObj = {
+            version: '1.0',
+            timestamp: new Date().toISOString(),
+            totalRecords: dataSurveyNow.length,
+            data: dataSurveyNow
+        };
+        
+        // Convert ke JSON string
+        const jsonStr = JSON.stringify(backupObj, null, 2);
+        
+        // Buat blob dan download
+        const blob = new Blob([jsonStr], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Nama file dengan timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        a.download = `backup_data_lokasi_${timestamp}.json`;
+        
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        alert(`Backup berhasil!\n${dataSurveyNow.length} data telah dibackup.`);
+    }).catch(function(err) {
+        console.error('Error backup:', err);
+        alert('Gagal melakukan backup data!\nError: ' + err);
+    });
+}
+
+// Restore Data
+function restoreData(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validasi file JSON
+    if (!file.name.endsWith('.json')) {
+        alert('File harus berformat .json!');
+        e.target.value = '';
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        try {
+            const backupObj = JSON.parse(event.target.result);
+            
+            // Validasi struktur backup
+            if (!backupObj.data || !Array.isArray(backupObj.data)) {
+                throw new Error('Format file backup tidak valid!');
+            }
+            
+            const dataToRestore = backupObj.data;
+            
+            if (dataToRestore.length === 0) {
+                alert('File backup tidak berisi data!');
+                e.target.value = '';
+                return;
+            }
+            
+            // Konfirmasi restore
+            const backupDate = backupObj.timestamp ? new Date(backupObj.timestamp).toLocaleString('id-ID') : 'Unknown';
+            const confirmMsg = `Restore data dari backup?\n\n` +
+                `Tanggal Backup: ${backupDate}\n` +
+                `Jumlah Data: ${dataToRestore.length}\n\n` +
+                `PERINGATAN: Data yang ada saat ini akan DIGANTI dengan data backup!\n\n` +
+                `Apakah Anda yakin ingin melanjutkan?`;
+            
+            if (!confirm(confirmMsg)) {
+                e.target.value = '';
+                return;
+            }
+            
+            // Hapus semua data existing
+            openDB().then(db => {
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    const req = store.clear();
+                    req.onsuccess = () => resolve(db);
+                    req.onerror = () => reject(req.error);
+                });
+            }).then(db => {
+                // Insert data dari backup
+                const promises = [];
+                dataToRestore.forEach(item => {
+                    // Hapus id agar auto-increment
+                    const itemCopy = {...item};
+                    delete itemCopy.id;
+                    
+                    const promise = new Promise((resolve, reject) => {
+                        const tx = db.transaction(STORE_NAME, 'readwrite');
+                        const store = tx.objectStore(STORE_NAME);
+                        const req = store.add(itemCopy);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(req.error);
+                    });
+                    promises.push(promise);
+                });
+                
+                return Promise.all(promises);
+            }).then(() => {
+                // Refresh tabel dan peta
+                setTimeout(renderTabelLokasi, 100);
+                alert(`Restore berhasil!\n${dataToRestore.length} data telah dipulihkan.`);
+                e.target.value = '';
+            }).catch(err => {
+                console.error('Error restore:', err);
+                alert('Gagal restore data!\nError: ' + err);
+                e.target.value = '';
+            });
+            
+        } catch (err) {
+            console.error('Error parsing backup:', err);
+            alert('File backup tidak valid atau rusak!\nError: ' + err.message);
+            e.target.value = '';
+        }
+    };
+    
+    reader.onerror = function() {
+        alert('Gagal membaca file!');
+        e.target.value = '';
+    };
+    
+    reader.readAsText(file);
 }
 
 
