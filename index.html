@@ -498,16 +498,23 @@ function addSurvey(data) {
             <label style="font-size:12px;">Foto Lokasi
                 <input type="file" id="foto" accept="image/*" style="font-size:12px;">
                 <small style="color:#666;display:block;font-size:10.5px;margin-top:3px;">
-                    <strong style="color:#2a7a3a;">📱 Agar koordinat terbaca otomatis:</strong><br>
-                    • Aktifkan GPS/Lokasi di HP sebelum ambil foto<br>
+                    <strong style="color:#2a7a3a;">📱 Khusus Android - Penting!</strong><br>
+                    • Aktifkan GPS di HP SEBELUM ambil foto<br>
                     • Beri izin lokasi ke aplikasi Kamera<br>
-                    • Ambil foto langsung dari kamera (jangan edit dulu)<br>
-                    • Atau: klik manual di peta jika foto tidak punya GPS
+                    • Gunakan aplikasi Kamera bawaan HP (jangan app pihak ketiga)<br>
+                    • JANGAN edit foto sebelum upload<br>
+                    • Jika tetap gagal: <strong>klik "Gunakan Lokasi Saat Ini"</strong> atau klik manual di peta
                 </small>
-                <button type="button" id="btn-kamera" style="margin-top:6px;margin-bottom:2px;padding:6px 12px;font-size:11px;background:#2a7a3a;color:#fff;border:none;border-radius:5px;cursor:pointer;">📷 Ambil Foto Kamera</button>
+                <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                    <button type="button" id="btn-kamera" style="padding:6px 12px;font-size:11px;background:#2a7a3a;color:#fff;border:none;border-radius:5px;cursor:pointer;flex:1;min-width:140px;">📷 Ambil Foto</button>
+                    <button type="button" id="btn-gunakan-lokasi-sekarang" style="padding:6px 12px;font-size:11px;background:#1976d2;color:#fff;border:none;border-radius:5px;cursor:pointer;flex:1;min-width:140px;">📍 Gunakan Lokasi Saat Ini</button>
+                </div>
                 <input type="file" id="kamera-capture" accept="image/*" capture="environment" style="display:none;font-size:12px;">
                 <small id="geotag-info" style="color:#2a7a3a;display:none;font-size:11px;font-weight:600;margin-top:4px;">✅ Koordinat dari foto berhasil dibaca!</small>
-                <small id="geotag-warning" style="color:#e65100;display:none;font-size:11px;margin-top:4px;">⚠️ Foto tidak memiliki data GPS. Silakan klik di peta untuk menentukan lokasi.</small>
+                <small id="geotag-warning" style="color:#e65100;display:none;font-size:11px;margin-top:4px;">
+                    ⚠️ Foto tidak memiliki data GPS.<br>
+                    <strong>Solusi Android:</strong> Klik tombol "Gunakan Lokasi Saat Ini" atau klik manual di peta.
+                </small>
             </label>
             <div class="form-actions">
                 <button type="submit" style="font-size:12px;">Simpan</button>
@@ -582,11 +589,26 @@ function addSurvey(data) {
         <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
         <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.js"></script>
+        <!-- Tambahan library untuk Android compatibility -->
+        <script src="https://cdn.jsdelivr.net/npm/piexifjs@1.0.6/piexif.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
         <script>
 // === UTILITAS ===
+// Deteksi platform
+function isAndroid() {
+    return /Android/i.test(navigator.userAgent);
+}
+
+function isiOS() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function isMobile() {
+    return isAndroid() || isiOS();
+}
+
 function dmsToDecimal(dms, ref) {
     var deg = dms[0].numerator / dms[0].denominator;
     var min = dms[1].numerator / dms[1].denominator;
@@ -595,10 +617,84 @@ function dmsToDecimal(dms, ref) {
     if (ref === 'S' || ref === 'W') dec = -dec;
     return dec;
 }
+
+// Konversi DMS ke Decimal untuk piexif format
+function piexifDmsToDecimal(dms, ref) {
+    if (!dms || dms.length < 3) return null;
+    var deg = dms[0][0] / dms[0][1];
+    var min = dms[1][0] / dms[1][1];
+    var sec = dms[2][0] / dms[2][1];
+    var dec = deg + min/60 + sec/3600;
+    if (ref === 'S' || ref === 'W') dec = -dec;
+    return dec;
+}
 function getGpsFromFile(file, callback) {
     console.log('📷 Membaca EXIF data dari foto:', file.name);
+    console.log('📱 Platform:', isAndroid() ? 'Android' : isiOS() ? 'iOS' : 'Desktop');
     
-    // Method 1: Gunakan EXIF.getData (lebih kompatibel dengan mobile)
+    // Untuk Android, gunakan piexif dulu (lebih reliable di mobile)
+    if (isAndroid() && typeof piexif !== 'undefined') {
+        console.log('🤖 Menggunakan piexif untuk Android...');
+        tryPiexifMethod(file, function(result) {
+            if (result.lat && result.lng) {
+                console.log('✅ piexif berhasil!');
+                callback(result);
+            } else {
+                console.log('⚠️ piexif gagal, coba EXIF.js...');
+                tryExifJsMethod(file, callback);
+            }
+        });
+    } else {
+        // Desktop atau iOS gunakan EXIF.js standard
+        tryExifJsMethod(file, callback);
+    }
+}
+
+// Method 1: piexif (terbaik untuk Android)
+function tryPiexifMethod(file, callback) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var dataUrl = e.target.result;
+            var exifObj = piexif.load(dataUrl);
+            var lat = null, lng = null;
+            
+            if (exifObj && exifObj.GPS) {
+                var gps = exifObj.GPS;
+                console.log('📍 piexif GPS data:', gps);
+                
+                if (gps[piexif.GPSIFD.GPSLatitude] && 
+                    gps[piexif.GPSIFD.GPSLongitude] &&
+                    gps[piexif.GPSIFD.GPSLatitudeRef] &&
+                    gps[piexif.GPSIFD.GPSLongitudeRef]) {
+                    
+                    var latDMS = gps[piexif.GPSIFD.GPSLatitude];
+                    var latRef = gps[piexif.GPSIFD.GPSLatitudeRef];
+                    var lngDMS = gps[piexif.GPSIFD.GPSLongitude];
+                    var lngRef = gps[piexif.GPSIFD.GPSLongitudeRef];
+                    
+                    lat = piexifDmsToDecimal(latDMS, latRef);
+                    lng = piexifDmsToDecimal(lngDMS, lngRef);
+                    
+                    console.log('✅ piexif koordinat:', lat, lng);
+                }
+            }
+            
+            callback({lat: lat, lng: lng});
+        } catch (err) {
+            console.error('❌ piexif error:', err);
+            callback({lat: null, lng: null});
+        }
+    };
+    reader.onerror = function() {
+        console.error('❌ Error reading file for piexif');
+        callback({lat: null, lng: null});
+    };
+    reader.readAsDataURL(file);
+}
+
+// Method 2: EXIF.js standard
+function tryExifJsMethod(file, callback) {
     EXIF.getData(file, function() {
         try {
             var lat = null, lng = null;
@@ -607,7 +703,7 @@ function getGpsFromFile(file, callback) {
             var lngData = EXIF.getTag(this, 'GPSLongitude');
             var lngRef = EXIF.getTag(this, 'GPSLongitudeRef');
             
-            console.log('📍 GPS Data ditemukan:', {
+            console.log('📍 EXIF.js GPS data:', {
                 lat: latData,
                 latRef: latRef,
                 lng: lngData,
@@ -617,14 +713,19 @@ function getGpsFromFile(file, callback) {
             if(latData && lngData && latRef && lngRef) {
                 lat = dmsToDecimal(latData, latRef);
                 lng = dmsToDecimal(lngData, lngRef);
-                console.log('✅ Koordinat berhasil dikonversi:', lat, lng);
+                console.log('✅ EXIF.js koordinat:', lat, lng);
             } else {
-                console.warn('⚠️ Data GPS tidak lengkap atau tidak ditemukan di foto');
+                console.warn('⚠️ EXIF.js: GPS tidak ditemukan');
             }
-            callback({lat: lat, lng: lng});
+            
+            if (!lat || !lng) {
+                // Fallback ke binary method
+                tryReadExifFallback(file, callback);
+            } else {
+                callback({lat: lat, lng: lng});
+            }
         } catch (err) {
-            console.error('❌ Error membaca EXIF:', err);
-            // Fallback ke method lama jika method baru gagal
+            console.error('❌ EXIF.js error:', err);
             tryReadExifFallback(file, callback);
         }
     });
@@ -809,6 +910,62 @@ document.addEventListener('DOMContentLoaded', function() {
             // Trigger event change agar proses sama seperti upload biasa
             var event = new Event('change', { bubbles: true });
             fotoInput.dispatchEvent(event);
+        }
+    });
+    // Tombol "Gunakan Lokasi Saat Ini" untuk Android
+    document.getElementById('btn-gunakan-lokasi-sekarang').addEventListener('click', function() {
+        console.log('🎯 Mengambil lokasi saat ini...');
+        if (navigator.geolocation) {
+            // Show loading state
+            this.textContent = '⏳ Mengambil lokasi...';
+            this.disabled = true;
+            var btnThis = this;
+            
+            navigator.geolocation.getCurrentPosition(function(pos) {
+                var lat = pos.coords.latitude.toFixed(6);
+                var lng = pos.coords.longitude.toFixed(6);
+                console.log('✅ Lokasi didapat:', lat, lng);
+                
+                // Set koordinat
+                document.getElementById('koordinat').value = lat + ',' + lng;
+                
+                // Tambahkan marker di peta
+                if (window.drawnItems) {
+                    var marker = L.marker([parseFloat(lat), parseFloat(lng)]);
+                    marker.on('dblclick', function() {
+                        window.drawnItems.removeLayer(marker);
+                    });
+                    window.drawnItems.addLayer(marker);
+                }
+                
+                // Pan map ke lokasi
+                if (map) {
+                    map.setView([parseFloat(lat), parseFloat(lng)], 17);
+                }
+                
+                // Show success message
+                document.getElementById('geotag-info').style.display = 'block';
+                document.getElementById('geotag-warning').style.display = 'none';
+                
+                // Reset button
+                btnThis.textContent = '📍 Gunakan Lokasi Saat Ini';
+                btnThis.disabled = false;
+                
+                alert('✅ Lokasi saat ini berhasil digunakan!\\nKoordinat: ' + lat + ', ' + lng);
+            }, function(err) {
+                console.error('❌ Error mendapatkan lokasi:', err);
+                alert('❌ Gagal mendapatkan lokasi!\\n\\nPastikan:\\n• GPS/Lokasi aktif\\n• Izin lokasi diberikan ke browser\\n• Akses melalui HTTPS atau localhost');
+                
+                // Reset button
+                btnThis.textContent = '📍 Gunakan Lokasi Saat Ini';
+                btnThis.disabled = false;
+            }, {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
+        } else {
+            alert('❌ Browser tidak support Geolocation API');
         }
     });
     document.getElementById('filter-lokasi').oninput = function() {
@@ -1006,11 +1163,20 @@ function handleFotoChange(e) {
     document.getElementById('geotag-warning').style.display = 'none';
     
     console.log('📷 Memproses foto:', file.name, 'ukuran:', (file.size/1024).toFixed(2) + 'KB');
+    console.log('📷 File type:', file.type);
+    console.log('📷 Last modified:', new Date(file.lastModified).toLocaleString());
+    console.log('📷 Platform:', isAndroid() ? 'Android' : isiOS() ? 'iOS' : 'Desktop');
+    
+    if (isAndroid()) {
+        console.log('🤖 Mode Android - Menggunakan multi-method EXIF reading...');
+    }
     
     processFotoGeotag(file, function(res) {
         if(res.lat && res.lng) {
             // Jika foto punya lokasi, tampilkan marker foto dan isi input koordinat
-            console.log('✅ Sukses! Koordinat ditemukan:', res.lat, res.lng);
+            console.log('✅ SUCCESS! Koordinat ditemukan:', res.lat, res.lng);
+            console.log('📍 Lat:', res.lat, 'Lng:', res.lng);
+            
             document.getElementById('koordinat').value = res.lat + ',' + res.lng;
             if(res.foto) {
                 tampilkanFotoDiPeta(parseFloat(res.lat), parseFloat(res.lng), res.foto);
@@ -1019,10 +1185,29 @@ function handleFotoChange(e) {
                 map.setView([parseFloat(res.lat),parseFloat(res.lng)], 17);
             }
             document.getElementById('geotag-info').style.display = 'block';
+            
+            // Notifikasi untuk Android
+            if (isAndroid()) {
+                console.log('🎉 Android: GPS berhasil dibaca dari foto!');
+            }
         } else {
             // Jika tidak ada lokasi di foto
             console.warn('⚠️ Koordinat GPS tidak ditemukan di foto');
-            console.log('💡 Solusi: Ambil foto baru dengan GPS aktif atau klik manual di peta');
+            
+            if (isAndroid()) {
+                console.log('❌ MASALAH UMUM DI ANDROID:');
+                console.log('1. Aplikasi kamera tidak punya izin lokasi');
+                console.log('2. GPS tidak aktif saat foto diambil');
+                console.log('3. Foto sudah diedit/dikompres oleh app lain');
+                console.log('4. Browser Android strip EXIF data untuk privacy');
+                console.log('');
+                console.log('💡 SOLUSI:');
+                console.log('• Klik tombol \"Gunakan Lokasi Saat Ini\" (RECOMMENDED)');
+                console.log('• Atau klik manual di peta untuk set lokasi');
+            } else {
+                console.log('💡 Solusi: Klik manual di peta atau ambil foto baru dengan GPS aktif');
+            }
+            
             // Jangan kosongkan koordinat jika sudah ada (user mungkin sudah klik di peta)
             if(!document.getElementById('koordinat').value) {
                 document.getElementById('koordinat').value = '';
