@@ -24,19 +24,27 @@ function deleteSurvey(id) {
     });
 }
 </script>
-<!-- IndexedDB Utility untuk dataSurvey -->
+<!-- IndexedDB Utility untuk dataSurvey dan importedLayers -->
 <script>
 const DB_NAME = 'mappingDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;  // Upgrade untuk menambah object store baru
 const STORE_NAME = 'dataSurvey';
+const LAYERS_STORE_NAME = 'importedLayers';  // Object store untuk imported layers
 
 function openDB() {
     return new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, DB_VERSION);
         req.onupgradeneeded = function(e) {
             const db = e.target.result;
+            
+            // Object store untuk survey data
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+            }
+            
+            // Object store untuk imported layers (KML/GeoJSON)
+            if (!db.objectStoreNames.contains(LAYERS_STORE_NAME)) {
+                db.createObjectStore(LAYERS_STORE_NAME, { keyPath: 'id', autoIncrement: true });
             }
         };
         req.onsuccess = function(e) { resolve(e.target.result); };
@@ -51,6 +59,82 @@ function addSurvey(data) {
             const store = tx.objectStore(STORE_NAME);
             const req = store.add(data);
             req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    });
+}
+
+// Fungsi untuk menyimpan imported layers ke IndexedDB
+function saveImportedLayersDB(layersData) {
+    return openDB().then(db => {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(LAYERS_STORE_NAME, 'readwrite');
+            const store = tx.objectStore(LAYERS_STORE_NAME);
+            
+            // Hapus semua data lama dulu
+            const clearReq = store.clear();
+            clearReq.onsuccess = function() {
+                // Tambahkan semua layers baru
+                let addedCount = 0;
+                if (layersData.length === 0) {
+                    resolve(0);
+                    return;
+                }
+                
+                layersData.forEach((layer, idx) => {
+                    const addReq = store.add(layer);
+                    addReq.onsuccess = function() {
+                        addedCount++;
+                        if (addedCount === layersData.length) {
+                            resolve(addedCount);
+                        }
+                    };
+                    addReq.onerror = function() {
+                        reject(addReq.error);
+                    };
+                });
+            };
+            clearReq.onerror = function() {
+                reject(clearReq.error);
+            };
+        });
+    });
+}
+
+// Fungsi untuk membaca imported layers dari IndexedDB
+function getImportedLayersDB() {
+    return openDB().then(db => {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(LAYERS_STORE_NAME, 'readonly');
+            const store = tx.objectStore(LAYERS_STORE_NAME);
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    });
+}
+
+// Fungsi untuk menghitung jumlah imported layers di IndexedDB
+function countImportedLayersDB() {
+    return openDB().then(db => {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(LAYERS_STORE_NAME, 'readonly');
+            const store = tx.objectStore(LAYERS_STORE_NAME);
+            const req = store.count();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    });
+}
+
+// Fungsi untuk menghapus semua imported layers dari IndexedDB
+function clearImportedLayersDB() {
+    return openDB().then(db => {
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(LAYERS_STORE_NAME, 'readwrite');
+            const store = tx.objectStore(LAYERS_STORE_NAME);
+            const req = store.clear();
+            req.onsuccess = () => resolve();
             req.onerror = () => reject(req.error);
         });
     });
@@ -252,6 +336,21 @@ function addSurvey(data) {
         background: #fafbfc;
         color: #253a2a;
     }
+    
+    #import-polygon {
+        max-width: 100%;
+        padding: 8px;
+        border: 2px dashed #1976d2;
+        border-radius: 6px;
+        background: #e3f2fd;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    #import-polygon:hover {
+        background: #bbdefb;
+        border-color: #1565c0;
+    }
     button, .btn {
         background: linear-gradient(90deg,#2e7d32,#1b5e20);
         color: #fff;
@@ -329,6 +428,11 @@ function addSurvey(data) {
             background: #fafbfc;
             color: #253a2a;
         }
+        #btn-bersihkan-koordinat, #btn-hapus-semua-drawing {
+            font-size: 10px;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
         .form-actions {
             flex-direction: column;
             gap: 4px;
@@ -396,6 +500,155 @@ function addSurvey(data) {
     }
     /* Scrollable table on mobile */
     .table-responsive { width: 100%; overflow-x: auto; background: #f2f4f1; }
+    
+    /* Styling untuk polygon survey */
+    .polygon-survey {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .polygon-survey:hover {
+        cursor: pointer;
+    }
+    
+    /* Popup polygon styling */
+    .leaflet-popup-content {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        line-height: 1.4;
+    }
+    
+    .leaflet-popup-content strong {
+        color: #2e7d32;
+        font-size: 13px;
+    }
+    
+    /* Styling untuk label polygon yang diimport */
+    .polygon-label {
+        background: rgba(255, 255, 255, 0.95) !important;
+        border: 2px solid #2e7d32 !important;
+        border-radius: 6px !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+        padding: 4px 10px !important;
+        font-weight: 600 !important;
+        font-size: 12px !important;
+        color: #1b5e20 !important;
+        font-family: 'Segoe UI', Arial, sans-serif !important;
+        white-space: nowrap !important;
+        text-align: center !important;
+        pointer-events: none !important;
+    }
+    
+    .polygon-label::before {
+        display: none !important;
+    }
+    
+    /* Styling untuk Leaflet Draw Toolbar */
+    .leaflet-draw-toolbar a {
+        background-color: #fff;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+    
+    .leaflet-draw-toolbar a:hover {
+        background-color: #f4f4f4;
+    }
+    
+    .leaflet-draw-actions {
+        background: #fff;
+        border-radius: 4px;
+        box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+        padding: 4px !important;
+    }
+    
+    /* Styling khusus untuk tombol Save dan Cancel */
+    .leaflet-draw-actions a {
+        display: inline-block !important;
+        margin: 2px !important;
+        padding: 6px 12px !important;
+        border-radius: 4px !important;
+        font-weight: bold !important;
+        font-size: 12px !important;
+        text-decoration: none !important;
+        cursor: pointer !important;
+    }
+    
+    /* Tombol SAVE - hijau */
+    .leaflet-draw-actions a[title*="Save"],
+    .leaflet-draw-actions a[title*="save"] {
+        background-color: #4CAF50 !important;
+        color: white !important;
+        border: 2px solid #45a049 !important;
+    }
+    
+    .leaflet-draw-actions a[title*="Save"]:hover,
+    .leaflet-draw-actions a[title*="save"]:hover {
+        background-color: #45a049 !important;
+        transform: scale(1.05) !important;
+    }
+    
+    /* Tombol CANCEL/Clear - orange */
+    .leaflet-draw-actions a[title*="Cancel"],
+    .leaflet-draw-actions a[title*="cancel"],
+    .leaflet-draw-actions a[title*="Clear"] {
+        background-color: #ff9800 !important;
+        color: white !important;
+        border: 2px solid #f57c00 !important;
+    }
+    
+    .leaflet-draw-actions a[title*="Cancel"]:hover,
+    .leaflet-draw-actions a[title*="cancel"]:hover,
+    .leaflet-draw-actions a[title*="Clear"]:hover {
+        background-color: #f57c00 !important;
+        transform: scale(1.05) !important;
+    }
+    
+    /* Tombol DELETE dalam delete mode - merah terang */
+    .leaflet-draw-actions a[title*="Delete"] {
+        background-color: #f44336 !important;
+        color: white !important;
+        border: 2px solid #d32f2f !important;
+    }
+    
+    .leaflet-draw-actions a[title*="Delete"]:hover {
+        background-color: #d32f2f !important;
+        transform: scale(1.05) !important;
+    }
+    
+    /* Highlight untuk drawing control */
+    .leaflet-draw-toolbar.leaflet-bar {
+        box-shadow: 0 2px 8px rgba(46, 125, 50, 0.15);
+    }
+    
+    /* Styling khusus untuk tombol Edit dan Delete - pastikan selalu terlihat */
+    .leaflet-draw-edit-edit,
+    .leaflet-draw-edit-remove {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+    
+    /* Warna berbeda untuk tombol Edit (biru) dan Delete (merah) */
+    .leaflet-draw-toolbar .leaflet-draw-edit-edit {
+        background-color: #e3f2fd !important;
+        border: 2px solid #2196F3 !important;
+    }
+    
+    .leaflet-draw-toolbar .leaflet-draw-edit-remove {
+        background-color: #ffebee !important;
+        border: 2px solid #f44336 !important;
+    }
+    
+    .leaflet-draw-toolbar .leaflet-draw-edit-edit:hover {
+        background-color: #bbdefb !important;
+        transform: scale(1.1);
+    }
+    
+    .leaflet-draw-toolbar .leaflet-draw-edit-remove:hover {
+        background-color: #ffcdd2 !important;
+        transform: scale(1.1);
+    }
+    
     /* Tombol lokasi saya custom control Leaflet */
     .leaflet-control-lokasi {
         background: #fff;
@@ -460,11 +713,40 @@ function addSurvey(data) {
         <!-- Peta Interaktif -->
         <div style="position:relative;">
             <div id="map"></div>
-            <!-- tombol lokasi lama dihapus, diganti dengan script otomatis -->
+            <!-- Info Toolbar Drawing -->
+            <!-- HIDDEN: Toolbar Drawing Instructions
+            <div style="margin-top:8px;padding:8px 12px;background:#e8f5e9;border-left:4px solid #2e7d32;border-radius:4px;font-size:11px;color:#1b5e20;">
+                <strong>📌 Toolbar Drawing (Kiri Atas Peta):</strong><br>
+                • <strong>Draw Polygon</strong> (🔷) - Gambar area polygon<br>
+                • <strong>Draw Marker</strong> (📍) - Tambah marker/titik<br>
+                • <strong style="color:#2196F3;">Edit Layers (✏️ BIRU)</strong> - Edit polygon yang sudah ada<br>
+                • <strong style="color:#f44336;">Delete Layers (🗑️ MERAH)</strong> - Hapus polygon<br>
+                <div style="margin-top:6px;padding:8px;background:#fff3cd;border-radius:3px;color:#856404;">
+                    <strong>📝 Cara Edit Polygon (LENGKAP):</strong><br>
+                    1️⃣ Klik tombol <strong>EDIT (✏️ background BIRU)</strong> di kiri atas peta<br>
+                    2️⃣ <strong>KLIK polygon</strong> yang ingin di-edit (polygon akan berubah warna magenta)<br>
+                    3️⃣ <strong>GESER titik-titik</strong> (vertices) untuk mengubah bentuk<br>
+                    4️⃣ Setelah selesai edit, tombol <strong style="color:#4CAF50;">SAVE (💾 HIJAU)</strong> dan <strong style="color:#ff9800;">CANCEL (ORANGE)</strong> muncul di toolbar<br>
+                    5️⃣ Klik <strong style="color:#4CAF50;">SAVE</strong> untuk menyimpan atau <strong style="color:#ff9800;">CANCEL</strong> untuk batal<br>
+                    <div style="margin-top:6px;padding:4px;background:#ffebee;border-radius:3px;color:#c62828;">
+                        <strong>⚠️ PENTING:</strong> Popup klik polygon <strong>TIDAK</strong> akan muncul saat mode edit aktif - ini normal! Leaflet-Draw mengambil alih kontrol klik untuk proses editing.
+                    </div>
+                </div>
+                <div style="margin-top:6px;padding:6px;background:#e3f2fd;border-radius:3px;color:#1565c0;">
+                    <strong>💡 Alternatif Edit Cepat:</strong> Klik 1x pada polygon → Pilih tombol "✏️ EDIT" dari popup
+                </div>
+                <em style="color:#388e3c;display:block;margin-top:4px;">🗑️ Hapus cepat: Double-click atau klik-kanan langsung pada polygon!</em>
+            </div>
+            -->
         </div>
+
         <!-- Form Input Data Survey Lokasi -->
         <form id="form-lahan">
-            <label style="font-size:12px;">Jenis Kegiatan
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <!-- BAGIAN 1: KLASIFIKASI -->
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <label style="font-size:12px;">
+                Jenis Kegiatan
                 <select id="jenis-kegiatan" required style="font-size:12px;">
                     <option value="">-- Pilih Kegiatan --</option>
                     <option value="Irigasi">Irigasi</option>
@@ -473,95 +755,222 @@ function addSurvey(data) {
                     <option value="Lainnya">Lainnya</option>
                 </select>
             </label>
-               <label style="font-size:12px;">Tanggal Kegiatan
-                   <input type="date" id="tanggal-kegiatan" required style="font-size:12px;">
-               </label>
-            <label style="font-size:12px;">Nama Gapoktan atau Kelompok Tani
-                <input type="text" id="gapoktan" placeholder="Masukkan nama Gapoktan atau Kelompok Tani" style="font-size:12px;" autocomplete="off">
+
+            <label style="font-size:12px;">
+                Tanggal Kegiatan
+                <input type="date" id="tanggal-kegiatan" required style="font-size:12px;">
             </label>
-            <label style="font-size:12px;">Nama Lokasi/Kegiatan
+
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <!-- BAGIAN 2: IDENTIFIKASI -->
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <label style="font-size:12px;">
+                Nama Lokasi/Kegiatan
                 <input type="text" id="nama" required placeholder="Contoh: Irigasi Desa X" style="font-size:12px;">
             </label>
-            <label style="font-size:12px;">Luas (ha) / Volume
+
+            <label style="font-size:12px;">
+                Nama Gapoktan atau Kelompok Tani
+                <input type="text" id="gapoktan" placeholder="Masukkan nama Gapoktan atau Kelompok Tani" style="font-size:12px;" autocomplete="off">
+            </label>
+
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <!-- BAGIAN 3: PENGUKURAN & DESKRIPSI -->
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <label style="font-size:12px;">
+                Luas (ha) / Volume
                 <input type="text" id="luas" required placeholder="Contoh: 1.25 atau 100m3" style="font-size:12px;">
             </label>
-            <label style="font-size:12px;">Deskripsi
+
+            <label style="font-size:12px;">
+                Deskripsi
                 <input type="text" id="deskripsi" placeholder="Keterangan tambahan" style="font-size:12px;">
             </label>
-            <label style="font-size:12px;">Koordinat/Polygon
-                <div style="display:flex;align-items:center;gap:8px;">
+
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <!-- BAGIAN 4: LOKASI -->
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <label style="font-size:12px;">
+                Koordinat/Polygon
+                <div style="display:flex; align-items:center; gap:8px;">
                     <input type="text" id="koordinat" readonly required placeholder="Klik atau gambar di peta" style="font-size:12px;">
-                    <button type="button" id="btn-bersihkan-koordinat" style="font-size:11px;padding:4px 10px;background:#e53935;color:#fff;border:none;border-radius:5px;cursor:pointer;">Bersihkan</button>
+                    <button type="button" id="btn-bersihkan-koordinat" style="font-size:11px; padding:4px 10px; background:#e53935; color:#fff; border:none; border-radius:5px; cursor:pointer;">
+                        Bersihkan
+                    </button>
                 </div>
-                <small style="color:#b00;font-size:11px;">Jika gagal mendapatkan lokasi: pastikan izin lokasi aktif, akses melalui HTTPS, dan coba refresh browser Anda.</small>
+                <small style="color:#b00; font-size:11px;">
+                    Jika gagal mendapatkan lokasi: pastikan izin lokasi aktif, akses melalui HTTPS, dan coba refresh browser Anda.
+                </small>
             </label>
-            <label style="font-size:12px;">Foto Lokasi
+
+            <label style="font-size:12px;">
+                Import Polygon dari File
+                <input type="file" id="import-polygon" accept=".kml,.kmz,.geojson,.json,.shp,.zip" style="font-size:12px;">
+                <small style="color:#666; display:block; font-size:10.5px; margin-top:3px;">
+                    • Format: <strong>KML, KMZ</strong> (Google Earth), <strong>GeoJSON</strong>, <strong>Shapefile (ZIP)</strong>
+                </small>
+                <div style="display:flex; gap:6px; margin-top:6px;">
+                    <button type="button" id="btn-clear-imported" 
+                            style="padding:6px 12px; font-size:11px; background:#ff5722; color:#fff; border:none; border-radius:5px; cursor:pointer; flex:1;" 
+                            title="Hapus semua layer dari file import">
+                        🗑️ Hapus Imported Layers
+                    </button>
+                    <button type="button" id="btn-test-storage" 
+                            style="padding:6px 12px; font-size:11px; background:#1976d2; color:#fff; border:none; border-radius:5px; cursor:pointer; flex:1;" 
+                            title="Test localStorage & tampilkan info">
+                        🔍 Test Storage
+                    </button>
+                </div>
+            </label>
+
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <!-- BAGIAN 5: DOKUMENTASI -->
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <label style="font-size:12px;">
+                Foto Lokasi
                 <input type="file" id="foto" accept="image/*" style="font-size:12px;">
-                <small style="color:#666;display:block;font-size:10.5px;margin-top:3px;">
-                    <strong style="color:#2a7a3a;">📱 Khusus Android - Penting!</strong><br>
-                    • Aktifkan GPS di HP SEBELUM ambil foto<br>
-                    • Beri izin lokasi ke aplikasi Kamera<br>
-                    • Gunakan aplikasi Kamera bawaan HP (jangan app pihak ketiga)<br>
-                    • JANGAN edit foto sebelum upload<br>
+                <small style="color:#666; display:block; font-size:10.5px; margin-top:3px;">
                     • Jika tetap gagal: <strong>klik "Gunakan Lokasi Saat Ini"</strong> atau klik manual di peta
                 </small>
-                <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-                    <button type="button" id="btn-kamera" style="padding:6px 12px;font-size:11px;background:#2a7a3a;color:#fff;border:none;border-radius:5px;cursor:pointer;flex:1;min-width:140px;">📷 Ambil Foto</button>
-                    <button type="button" id="btn-gunakan-lokasi-sekarang" style="padding:6px 12px;font-size:11px;background:#1976d2;color:#fff;border:none;border-radius:5px;cursor:pointer;flex:1;min-width:140px;">📍 Gunakan Lokasi Saat Ini</button>
+                <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                    <button type="button" id="btn-kamera" 
+                            style="padding:6px 12px; font-size:11px; background:#2a7a3a; color:#fff; border:none; border-radius:5px; cursor:pointer; flex:1; min-width:140px;">
+                        📷 Ambil Foto
+                    </button>
+                    <button type="button" id="btn-gunakan-lokasi-sekarang" 
+                            style="padding:6px 12px; font-size:11px; background:#1976d2; color:#fff; border:none; border-radius:5px; cursor:pointer; flex:1; min-width:140px;">
+                        📍 Gunakan Lokasi Saat Ini
+                    </button>
                 </div>
-                <input type="file" id="kamera-capture" accept="image/*" capture="environment" style="display:none;font-size:12px;">
-                <small id="geotag-info" style="color:#2a7a3a;display:none;font-size:11px;font-weight:600;margin-top:4px;">✅ Koordinat dari foto berhasil dibaca!</small>
-                <small id="geotag-warning" style="color:#e65100;display:none;font-size:11px;margin-top:4px;">
+                
+                <!-- Indikator Status Lokasi Valid -->
+                <small id="lokasi-valid-info" style="color:#2a7a3a; display:none; font-size:11px; font-weight:600; margin-top:6px; padding:6px 10px; background:#e8f5e9; border-left:3px solid #4caf50; border-radius:4px;">
+                    ✅ Lokasi valid terdeteksi! (Lat: <span id="lokasi-lat">-</span>, Lng: <span id="lokasi-lng">-</span>)
+                </small>
+                <small id="lokasi-loading-info" style="color:#1976d2; display:none; font-size:11px; font-weight:600; margin-top:6px; padding:6px 10px; background:#e3f2fd; border-left:3px solid #2196f3; border-radius:4px;">
+                    ⏳ Mendeteksi lokasi...
+                </small>
+                
+                <input type="file" id="kamera-capture" accept="image/*" capture="environment" style="display:none; font-size:12px;">
+                <small id="geotag-info" style="color:#2a7a3a; display:none; font-size:11px; font-weight:600; margin-top:4px;">
+                    ✅ Koordinat dari foto berhasil dibaca!
+                </small>
+                <small id="geotag-warning" style="color:#e65100; display:none; font-size:11px; margin-top:4px;">
                     ⚠️ Foto tidak memiliki data GPS.<br>
                     <strong>Solusi Android:</strong> Klik tombol "Gunakan Lokasi Saat Ini" atau klik manual di peta.
                 </small>
             </label>
+
+
+            <!-- ═══════════════════════════════════════════════════════════ -->
+            <!-- TOMBOL AKSI FORM -->
+            <!-- ═══════════════════════════════════════════════════════════ -->
             <div class="form-actions">
-                <button type="submit" style="font-size:12px;">Simpan</button>
-                <div class="dropdown-ekspor" style="display:inline-block;position:relative;">
-                    <button type="button" id="btn-ekspor-group" style="font-size:12px;padding:2px 16px;min-width:120px;">Ekspor Data ▼</button>
-                    <div id="menu-ekspor" style="display:none;position:absolute;z-index:10;min-width:165px;background:#fff;border:1px solid #ccc;border-radius:8px;box-shadow:0 3px 10px rgba(0,0,0,0.12);top:110%;left:0;padding:4px 0;">
-                        <div style="padding:5px 10px;font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid #eee;margin-bottom:2px;">Ekspor</div>
-                        <button type="button" id="ekspor-kml" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#253a2a;font-weight:500;">📍 KML</button>
-                        <button type="button" id="ekspor-excel" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#253a2a;font-weight:500;">📊 Excel</button>
-                        <hr style="margin:4px 6px;border:0;border-top:1px solid #eee;">
-                        <div style="padding:5px 10px;font-size:10px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid #eee;margin-bottom:2px;">Data</div>
-                        <button type="button" id="backup-data" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#2e7d32;font-weight:600;">💾 Backup</button>
-                        <button type="button" id="restore-data" style="width:100%;text-align:left;padding:7px 12px;font-size:11.5px;border:none;background:none;color:#1976d2;font-weight:600;">📥 Restore</button>
+                <button type="submit" style="font-size:12px;">
+                    Simpan
+                </button>
+                <div class="dropdown-ekspor" style="display:inline-block; position:relative;">
+                    <button type="button" id="btn-ekspor-group" style="font-size:12px; padding:2px 16px; min-width:120px;">
+                        Ekspor Data ▼
+                    </button>
+                    <div id="menu-ekspor" style="display:none; position:absolute; z-index:10; min-width:165px; background:#fff; border:1px solid #ccc; border-radius:8px; box-shadow:0 3px 10px rgba(0,0,0,0.12); top:110%; left:0; padding:4px 0;">
+                        <div style="padding:5px 10px; font-size:10px; color:#888; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; border-bottom:1px solid #eee; margin-bottom:2px;">
+                            Ekspor Data Tersimpan
+                        </div>
+                        <button type="button" id="ekspor-kml" style="width:100%; text-align:left; padding:7px 12px; font-size:11.5px; border:none; background:none; color:#253a2a; font-weight:500;">
+                            📍 KML
+                        </button>
+                        <button type="button" id="ekspor-excel" style="width:100%; text-align:left; padding:7px 12px; font-size:11.5px; border:none; background:none; color:#253a2a; font-weight:500;">
+                            📊 Excel
+                        </button>
+                        <hr style="margin:4px 6px; border:0; border-top:1px solid #eee;">
+                        <div style="padding:5px 10px; font-size:10px; color:#888; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; border-bottom:1px solid #eee; margin-bottom:2px;">
+                            Ekspor Drawing
+                        </div>
+                        <button type="button" id="ekspor-draw-kml" style="width:100%; text-align:left; padding:7px 12px; font-size:11.5px; border:none; background:none; color:#e65100; font-weight:500;">
+                            🖊️ KML Drawing
+                        </button>
+                        <button type="button" id="ekspor-draw-geojson" style="width:100%; text-align:left; padding:7px 12px; font-size:11.5px; border:none; background:none; color:#e65100; font-weight:500;">
+                            🗺 GeoJSON Drawing
+                        </button>
+                        <hr style="margin:4px 6px; border:0; border-top:1px solid #eee;">
+                        <div style="padding:5px 10px; font-size:10px; color:#888; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; border-bottom:1px solid #eee; margin-bottom:2px;">
+                            Data
+                        </div>
+                        <button type="button" id="backup-data" style="width:100%; text-align:left; padding:7px 12px; font-size:11.5px; border:none; background:none; color:#2e7d32; font-weight:600;">
+                            💾 Backup
+                        </button>
+                        <button type="button" id="restore-data" style="width:100%; text-align:left; padding:7px 12px; font-size:11.5px; border:none; background:none; color:#1976d2; font-weight:600;">
+                            📥 Restore
+                        </button>
                     </div>
                 </div>
                 <input type="file" id="restore-file-input" accept=".json" style="display:none;">
             </div>
         </form>
-            <button type="button" id="cetak-laporan" style="margin-top:12px;font-size:12px;padding:2px 16px;min-width:120px;background:#8cbf7e;color:#253a2a;border-radius:8px;border:1px solid #a3a97a;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" style="vertical-align:middle;margin-right:8px;"><path d="M6 9V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="9" width="18" height="7" rx="2" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 16v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Cetak Laporan
-            </button>
-            <hr style="margin:18px 0 24px 0;border:0;border-top:2px solid #a3a97a;">
+
+        <!-- Tombol Cetak Laporan -->
+        <button type="button" id="cetak-laporan" style="margin-top:12px; font-size:12px; padding:2px 16px; min-width:120px; background:#8cbf7e; color:#253a2a; border-radius:8px; border:1px solid #a3a97a;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" style="vertical-align:middle; margin-right:8px;">
+                <path d="M6 9V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <rect x="3" y="9" width="18" height="7" rx="2" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6 16v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Cetak Laporan
+        </button>
+
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- STYLE UNTUK PRINT -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
         <style>
-        @media print {
-            body * { visibility: hidden !important; }
-            #judul-tabel-lokasi, #tabel-lokasi, #tabel-lokasi * { visibility: visible !important; }
-            #judul-tabel-lokasi { position: absolute; left: 0; top: 0; width: 100vw; text-align: center; margin-bottom: 16px; }
-            #tabel-lokasi { position: absolute; left: 0; top: 40px; width: 100vw; }
-        }
+            @media print {
+                body * { 
+                    visibility: hidden !important; 
+                }
+                #judul-tabel-lokasi, #tabel-lokasi, #tabel-lokasi * { 
+                    visibility: visible !important; 
+                }
+                #judul-tabel-lokasi { 
+                    position: absolute; 
+                    left: 0; 
+                    top: 0; 
+                    width: 100vw; 
+                    text-align: center; 
+                    margin-bottom: 16px; 
+                }
+                #tabel-lokasi { 
+                    position: absolute; 
+                    left: 0; 
+                    top: 40px; 
+                    width: 100vw; 
+                }
+            }
         </style>
-        <!-- Tabel Data Lokasi -->
-        <div style="margin-top:32px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;">
-            <h2 id="judul-tabel-lokasi" style="margin:0;font-size:1.35rem;color:#2e7d32;">Data Lokasi Survey</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;">
-                <!-- Filter kelompok tani dihapus -->
-                <input type="text" id="filter-lokasi" placeholder="Cari lokasi/kegiatan..." style="padding:8px;border-radius:6px;border:1px solid #bbb;width:220px;">
-                <span id="jumlah-data-lokasi" style="margin-top:8px;font-size:0.95rem;font-weight:500;color:#388e3c;letter-spacing:0.5px;"></span>
+
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <!-- TABEL DATA LOKASI -->
+        <!-- ═══════════════════════════════════════════════════════════ -->
+        <div style="margin-top:32px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between;">
+            <h2 id="judul-tabel-lokasi" style="margin:0; font-size:1.35rem; color:#2e7d32;">
+                Data Lokasi Survey
+            </h2>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <input type="text" id="filter-lokasi" placeholder="Cari lokasi/kegiatan..." 
+                       style="padding:8px; border-radius:6px; border:1px solid #bbb; width:220px;">
+                <span id="jumlah-data-lokasi" 
+                      style="margin-top:8px; font-size:0.95rem; font-weight:500; color:#388e3c; letter-spacing:0.5px;">
+                </span>
             </div>
         </div>
+
         <div class="table-responsive">
             <table id="tabel-lokasi">
                 <thead>
                     <tr>
                         <th>No</th>
                         <th>Jenis Kegiatan</th>
-                           <th>Tanggal</th>
+                        <th>Tanggal</th>
                         <th>Nama Lokasi</th>
                         <th>Gapoktan/Kelompok</th>
                         <th>Luas/Volume</th>
@@ -575,14 +984,14 @@ function addSurvey(data) {
                 <tbody></tbody>
             </table>
             <style>
-            #tabel-lokasi th, #tabel-lokasi td, #tabel-lokasi input[type="text"] {
-                font-size: 11px;
-                padding: 6px 4px;
-            }
-            #tabel-lokasi {
-                width: 100%;
-                table-layout: auto;
-            }
+                #tabel-lokasi th, #tabel-lokasi td, #tabel-lokasi input[type="text"] {
+                    font-size: 11px;
+                    padding: 6px 4px;
+                }
+                #tabel-lokasi {
+                    width: 100%;
+                    table-layout: auto;
+                }
             </style>
         </div>
     </div>
@@ -594,6 +1003,9 @@ function addSurvey(data) {
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+        <!-- Library untuk KMZ dan Shapefile -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
         <script>
 // === UTILITAS ===
 // Deteksi platform
@@ -763,6 +1175,185 @@ function tryReadExifFallback(file, callback) {
 // === DATA & VARIABEL GLOBAL ===
 var markerGeotag = null;
 var map, userLocation = null;
+var polygonLayer = new L.FeatureGroup(); // Layer khusus untuk polygon dari data survey
+var polygonColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2']; // Warna polygon
+var currentPolygonIndex = 0;
+
+// === FUNGSI PERSISTENT STORAGE UNTUK IMPORTED LAYERS (IndexedDB) ===
+// Simpan imported layers ke IndexedDB
+function saveImportedLayers() {
+    if (!window.drawnItems) {
+        console.log('⚠️ drawnItems belum diinisialisasi');
+        return;
+    }
+    
+    var layersData = [];
+    
+    window.drawnItems.eachLayer(function(layer) {
+        // Hanya simpan layer yang memiliki flag _isImported
+        if (layer._isImported) {
+            var layerData = {
+                leafletId: layer._leaflet_id,
+                isImported: true
+            };
+            
+            // Simpan berdasarkan tipe layer
+            if (layer instanceof L.Polygon) {
+                layerData.type = 'polygon';
+                layerData.coordinates = layer.getLatLngs()[0].map(function(ll) {
+                    return [ll.lat, ll.lng];
+                });
+                layerData.style = {
+                    color: layer.options.color || layer._originalColor || '#FF6B6B',
+                    weight: layer.options.weight || 2,
+                    opacity: layer.options.opacity || 0.7,
+                    fillOpacity: layer.options.fillOpacity || 0.3
+                };
+            } else if (layer instanceof L.Marker) {
+                layerData.type = 'marker';
+                var latlng = layer.getLatLng();
+                layerData.coordinates = [latlng.lat, latlng.lng];
+            }
+            
+            // Simpan metadata
+            if (layer._importedName) layerData.name = layer._importedName;
+            if (layer._importedDescription) layerData.description = layer._importedDescription;
+            if (layer._importedSource) layerData.source = layer._importedSource;
+            
+            layersData.push(layerData);
+        }
+    });
+    
+    // Simpan ke IndexedDB
+    saveImportedLayersDB(layersData)
+        .then(function(count) {
+            console.log('💾 Saved', count, 'imported layer(s) ke IndexedDB');
+            var dataSize = JSON.stringify(layersData).length;
+            console.log('📦 Data size:', (dataSize / 1024).toFixed(2), 'KB');
+            console.log('✅ Save verified - data tersimpan dengan benar di IndexedDB');
+        })
+        .catch(function(err) {
+            console.error('❌ Error saving to IndexedDB:', err);
+            
+            if (err.name === 'QuotaExceededError') {
+                alert('❌ ERROR: IndexedDB penuh!\n\nTidak dapat menyimpan imported layers.\nHapus data browser atau gunakan browser lain.');
+            } else {
+                alert('❌ ERROR: Gagal menyimpan data!\n\n' + err.message + '\n\nPastikan browser tidak dalam mode Private/Incognito dan mendukung IndexedDB.');
+            }
+        });
+}
+
+// Restore imported layers dari IndexedDB
+function restoreImportedLayers() {
+    if (!window.drawnItems) {
+        console.log('⚠️ drawnItems belum diinisialisasi');
+        return;
+    }
+    
+    console.log('🔍 Checking IndexedDB for imported layers...');
+    
+    getImportedLayersDB()
+        .then(function(layersData) {
+            console.log('   Retrieved data:', layersData);
+            
+            if (!Array.isArray(layersData) || layersData.length === 0) {
+                console.log('📊 Tidak ada imported layers tersimpan di IndexedDB');
+                return;
+            }
+            
+            console.log('🔄 Restoring', layersData.length, 'imported layer(s) dari IndexedDB...');
+            
+            var restoredCount = 0;
+            layersData.forEach(function(layerData) {
+                try {
+                    var layer = null;
+                    
+                    if (layerData.type === 'polygon') {
+                        // Restore polygon
+                        var coords = layerData.coordinates.map(function(c) {
+                            return [c[0], c[1]];
+                        });
+                        
+                        layer = L.polygon(coords, {
+                            color: layerData.style.color,
+                            weight: layerData.style.weight,
+                            opacity: layerData.style.opacity,
+                            fillOpacity: layerData.style.fillOpacity
+                        });
+                        
+                        // Simpan warna asli
+                        layer._originalColor = layerData.style.color;
+                        
+                        // Hover effect
+                        layer.on('mouseover', function() {
+                            this.setStyle({weight: 3, opacity: 1, fillOpacity: 0.5});
+                        });
+                        layer.on('mouseout', function() {
+                            this.setStyle({
+                                weight: layerData.style.weight, 
+                                opacity: layerData.style.opacity, 
+                                fillOpacity: layerData.style.fillOpacity
+                            });
+                        });
+                        
+                        // Tambahkan label permanen di tengah polygon
+                        var labelText = layerData.name || 'Imported Feature';
+                        layer.bindTooltip(labelText, {
+                            permanent: true,
+                            direction: 'center',
+                            className: 'polygon-label'
+                        });
+                        
+                    } else if (layerData.type === 'marker') {
+                        // Restore marker
+                        layer = L.marker([layerData.coordinates[0], layerData.coordinates[1]]);
+                    }
+                    
+                    if (layer) {
+                        // Tandai sebagai imported layer
+                        layer._isImported = true;
+                        layer._importedName = layerData.name || 'Imported Feature';
+                        layer._importedDescription = layerData.description || '';
+                        layer._importedSource = layerData.source || 'Restored from IndexedDB';
+                        
+                        // Popup
+                        var popupContent = '<div style="font-size:12px;"><strong>' + layer._importedName + '</strong><br>';
+                        if (layer._importedDescription) {
+                            popupContent += layer._importedDescription + '<br>';
+                        }
+                        popupContent += '<em style="color:#1976d2;">' + layer._importedSource + '</em></div>';
+                        layer.bindPopup(popupContent);
+                        
+                        // Attach delete events
+                        if (window.attachDeleteEvents) {
+                            window.attachDeleteEvents(layer);
+                        }
+                        
+                        // Tambahkan ke drawnItems
+                        window.drawnItems.addLayer(layer);
+                        restoredCount++;
+                    }
+                } catch (err) {
+                    console.error('❌ Error restoring layer:', err);
+                }
+            });
+            
+            console.log('✅ Restored', restoredCount, 'imported layer(s) dari IndexedDB');
+            
+            // HIDDEN: Alert notifikasi restore berhasil
+            /*
+            if (restoredCount > 0) {
+                setTimeout(function() {
+                    alert('📌 ' + restoredCount + ' imported layer berhasil dipulihkan!\n\nLayer dari file KML/GeoJSON sebelumnya sudah ditampilkan di peta.');
+                }, 1000);
+            }
+            */
+        })
+        .catch(function(err) {
+            console.error('❌ Error restoring from IndexedDB:', err);
+            alert('❌ Gagal memulihkan imported layers!\n\n' + err.message);
+        });
+}
 
 // === INISIALISASI PETA ===
 function initMap() {
@@ -770,23 +1361,31 @@ function initMap() {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(function(pos) {
             userLocation = [pos.coords.latitude, pos.coords.longitude];
-            buatMap(userLocation);
+            buatMap(userLocation, pos); // Pass pos object untuk auto-fill form
         }, function(err) {
             // Jika gagal, langsung gunakan lokasi default tanpa popup
-            buatMap([-1.6875, 101.6175]);
+            buatMap([-1.6875, 101.6175], null);
         }, {timeout: 10000});
     } else {
-        buatMap([-1.6875, 101.6175]);
+        buatMap([-1.6875, 101.6175], null);
     }
 }
-function buatMap(center) {
+
+function buatMap(center, positionData) {
     map = L.map('map', {maxZoom: 17}).setView(center, 15);
     var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 22 });
     var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 17 });
     var terrain = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: '© OpenTopoMap', maxZoom: 22 });
     var baseLayers = { "OSM": osm, "Satelit": sat, "Terrain": terrain };
     osm.addTo(map);
-    L.control.layers(baseLayers).addTo(map);
+    
+    // Tambahkan polygon layer ke map
+    map.addLayer(polygonLayer);
+    
+    // Kontrol layer dengan polygon layer
+    var overlayLayers = { "Polygon Layer": polygonLayer };
+    L.control.layers(baseLayers, overlayLayers).addTo(map);
+    
     if(center && center.length===2) {
         // Tampilkan marker (pin) dan label
         L.marker(center).addTo(map);
@@ -799,48 +1398,847 @@ function buatMap(center) {
         L.marker(center, {icon: label, interactive: false}).addTo(map);
     }
     afterMapInit();
+    
+    // Restore imported layers dari IndexedDB
+    setTimeout(function() {
+        restoreImportedLayers();
+    }, 500);
+    
+    // Auto-fill form koordinat jika positionData tersedia (TANPA request lokasi lagi)
+    if (positionData) {
+        // Show loading indicator
+        var lokasiLoadingInfo = document.getElementById('lokasi-loading-info');
+        if (lokasiLoadingInfo) lokasiLoadingInfo.style.display = 'block';
+        
+        setTimeout(function() {
+            var lat = positionData.coords.latitude.toFixed(6);
+            var lng = positionData.coords.longitude.toFixed(6);
+            console.log('✅ Auto-location berhasil (dari init):', lat, lng);
+            
+            // Set koordinat ke form
+            var koordinatInput = document.getElementById('koordinat');
+            if (koordinatInput && !koordinatInput.value) {
+                koordinatInput.value = lat + ',' + lng;
+                console.log('   📝 Koordinat diisi otomatis ke form');
+            }
+            
+            // Tambahkan marker di peta
+            if (window.drawnItems) {
+                var marker = L.marker([parseFloat(lat), parseFloat(lng)], {
+                    title: 'Lokasi Saat Ini (Auto)'
+                });
+                
+                marker.bindPopup('<div style="font-size:12px;"><strong>📍 Lokasi Anda</strong><br>Didapat otomatis saat aplikasi dibuka<br><em>Lat: ' + lat + '<br>Lng: ' + lng + '</em></div>');
+                
+                if (window.attachDeleteEvents) {
+                    window.attachDeleteEvents(marker);
+                }
+                
+                window.drawnItems.addLayer(marker);
+                console.log('   📍 Marker lokasi ditambahkan ke peta');
+            }
+            
+            // Update indikator lokasi valid
+            var lokasiValidInfo = document.getElementById('lokasi-valid-info');
+            var lokasiLatSpan = document.getElementById('lokasi-lat');
+            var lokasiLngSpan = document.getElementById('lokasi-lng');
+            if (lokasiValidInfo && lokasiLatSpan && lokasiLngSpan) {
+                lokasiLatSpan.textContent = lat;
+                lokasiLngSpan.textContent = lng;
+                lokasiValidInfo.style.display = 'block';
+            }
+            // Hide loading indicator
+            if (lokasiLoadingInfo) lokasiLoadingInfo.style.display = 'none';
+        }, 1000);
+    }
 }
 function afterMapInit() {
-    window.drawnItems = new L.FeatureGroup();
-    map.addLayer(window.drawnItems);
+    // Inisialisasi drawnItems sebagai FeatureGroup untuk menyimpan semua drawings
+    if (!window.drawnItems) {
+        window.drawnItems = new L.FeatureGroup();
+        map.addLayer(window.drawnItems);
+        console.log('✅ drawnItems FeatureGroup created and added to map');
+    }
+    
+    // Flag untuk track edit/delete mode dari toolbar
+    window._isEditMode = false;
+    window._isDeleteMode = false;
+    
+    // Konfigurasi Draw Control dengan opsi yang lebih robust
     var drawControl = new L.Control.Draw({
-        draw: { polygon: true, marker: true, polyline: false, rectangle: false, circle: false, circlemarker: false },
-        edit: { featureGroup: window.drawnItems }
-    });
-    map.addControl(drawControl);
-        map.on('click', function(e) {
-            var latlng = e.latlng;
-            document.getElementById('koordinat').value = latlng.lat.toFixed(6) + ',' + latlng.lng.toFixed(6);
-            // Jangan hapus marker lain, hanya tambahkan marker baru
-            var marker = L.marker(latlng);
-            marker.on('dblclick', function() {
-                window.drawnItems.removeLayer(marker);
-            });
-            marker.on('contextmenu', function(e) {
-                window.drawnItems.removeLayer(marker);
-            });
-            window.drawnItems.addLayer(marker);
-        });
-    map.on(L.Draw.Event.CREATED, function (e) {
-        // Tambahkan event dblclick jika marker
-        if (e.layerType === 'marker') {
-            var latlng = e.layer.getLatLng();
-            document.getElementById('koordinat').value = latlng.lat.toFixed(6) + ',' + latlng.lng.toFixed(6);
-            e.layer.on('dblclick', function() {
-                window.drawnItems.removeLayer(e.layer);
-            });
-            e.layer.on('contextmenu', function(ev) {
-                window.drawnItems.removeLayer(e.layer);
-            });
-        } else if (e.layerType === 'polygon') {
-            var latlngs = e.layer.getLatLngs()[0].map(function(ll) {
-                return ll.lat.toFixed(6) + ',' + ll.lng.toFixed(6);
-            });
-            document.getElementById('koordinat').value = latlngs.join(' | ');
+        position: 'topleft',
+        draw: { 
+            polygon: {
+                allowIntersection: false,
+                showArea: true,
+                metric: true, // Gunakan sistem metrik
+                drawError: {
+                    color: '#e1e100',
+                    message: '<strong>Error:</strong> Bentuk polygon tidak boleh berpotongan!'
+                },
+                shapeOptions: {
+                    color: '#2e7d32',
+                    weight: 3,
+                    opacity: 0.8,
+                    fillOpacity: 0.4
+                },
+                repeatMode: false // Nonaktifkan repeat mode setelah drawing
+            },
+            marker: {
+                repeatMode: false
+            },
+            polyline: false,
+            rectangle: false,
+            circle: false,
+            circlemarker: false
+        },
+        edit: {
+            featureGroup: window.drawnItems,
+            remove: true,
+            edit: {
+                selectedPathOptions: {
+                    maintainColor: false,
+                    opacity: 0.9,
+                    fillOpacity: 0.6,
+                    dashArray: '10, 10',
+                    weight: 3
+                }
+            }
         }
-        window.drawnItems.addLayer(e.layer);
     });
-            // clearLayers di event peta tidak diperlukan
+    
+    // Tambahkan draw control ke map
+    map.addControl(drawControl);
+    console.log('✅ Draw control added to map with enhanced configuration');
+    
+    console.log('✅ Draw control added with edit toolbar enabled');
+    console.log('📊 Edit options:', drawControl.options.edit);
+    
+    // Setup MutationObserver untuk mendeteksi toolbar actions dan attach click handlers
+    var toolbarObserver = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            mutation.addedNodes.forEach(function(node) {
+                // Cek apakah ini toolbar actions
+                if (node.nodeType === 1 && (
+                    node.classList && (
+                        node.classList.contains('leaflet-draw-actions') ||
+                        node.classList.contains('leaflet-draw-actions-top') ||
+                        node.classList.contains('leaflet-draw-actions-bottom')
+                    )
+                )) {
+                    console.log('👀 Toolbar actions detected!');
+                    
+                    // Attach click handlers ke tombol Save dan Cancel
+                    setTimeout(function() {
+                        var saveButtons = node.querySelectorAll('a[title*="Save"], a[title*="save"]');
+                        var cancelButtons = node.querySelectorAll('a[title*="Cancel"], a[title*="cancel"]');
+                        
+                        saveButtons.forEach(function(btn) {
+                            btn.addEventListener('click', function() {
+                                console.log('💾 SAVE button clicked - akan hide toolbar');
+                                setTimeout(function() {
+                                    hideDrawActions();
+                                }, 150);
+                            });
+                        });
+                        
+                        cancelButtons.forEach(function(btn) {
+                            btn.addEventListener('click', function() {
+                                console.log('↩️ CANCEL button clicked - akan hide toolbar');
+                                setTimeout(function() {
+                                    hideDrawActions();
+                                }, 150);
+                            });
+                        });
+                        
+                        console.log('  ✅ Click handlers attached:', saveButtons.length, 'save,', cancelButtons.length, 'cancel');
+                    }, 50);
+                }
+            });
+        });
+    });
+    
+    // Observasi perubahan di map container
+    toolbarObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    console.log('👁️ Toolbar observer active');
+    
+    // Pastikan toolbar edit/delete selalu terlihat
+    setTimeout(function() {
+        var drawToolbar = document.querySelector('.leaflet-draw-toolbar');
+        var editButtons = document.querySelectorAll('.leaflet-draw-edit-edit, .leaflet-draw-edit-remove');
+        
+        console.log('🔍 Toolbar check:');
+        console.log('  - Draw toolbar:', drawToolbar ? '✅ Found' : '❌ Not found');
+        console.log('  - Edit/Delete buttons found:', editButtons.length);
+        console.log('  - drawnItems layers:', window.drawnItems.getLayers().length);
+        
+        // Tambahkan class khusus untuk styling
+        editButtons.forEach(function(btn) {
+            btn.style.display = 'block';
+            btn.style.visibility = 'visible';
+            btn.style.opacity = '1';
+            console.log('  - Button class:', btn.className, '✅ Dipastikan terlihat');
+        });
+        
+        // Jika tidak ada layer, tambahkan pesan
+        if (window.drawnItems.getLayers().length === 0) {
+            console.log('💡 Belum ada layer. Gambar polygon/marker pertama untuk mengaktifkan edit/delete!');
+        } else {
+            console.log('✅ Ada', window.drawnItems.getLayers().length, 'layer. Tombol edit/delete seharusnya aktif!');
+        }
+    }, 1000);
+    
+    // Fungsi helper untuk menyembunyikan toolbar actions (Save/Cancel/Delete)
+    function hideDrawActions() {
+        console.log('🧹 Cleaning up draw actions toolbar...');
+        
+        try {
+            // Method 1: Cari dan hapus semua elemen toolbar actions
+            var actionBars = document.querySelectorAll('.leaflet-draw-actions, .leaflet-draw-actions-top, .leaflet-draw-actions-bottom');
+            
+            var removedCount = 0;
+            actionBars.forEach(function(bar) {
+                if (bar && bar.style.display !== 'none') {
+                    bar.style.display = 'none';
+                    bar.style.visibility = 'hidden';
+                    bar.style.opacity = '0';
+                    
+                    // Hapus dari DOM
+                    try {
+                        if (bar.parentNode) {
+                            bar.parentNode.removeChild(bar);
+                            removedCount++;
+                        }
+                    } catch (e) {
+                        console.log('  ⚠️ Could not remove from DOM, but hidden via CSS');
+                    }
+                }
+            });
+            
+            if (removedCount > 0) {
+                console.log('  ✅', removedCount, 'action bar(s) removed');
+            }
+            
+            // Method 2: Sembunyikan semua tombol action individual
+            var actionButtons = document.querySelectorAll(
+                '.leaflet-draw-actions a, ' +
+                '.leaflet-draw-actions-top a, ' +
+                '.leaflet-draw-actions-bottom a, ' +
+                'a[title*=\"Save\"], ' +
+                'a[title*=\"Cancel\"], ' +
+                'a[title*=\"Delete\"]'
+            );
+            
+            var hiddenCount = 0;
+            actionButtons.forEach(function(btn) {
+                if (btn && window.getComputedStyle(btn).display !== 'none') {
+                    btn.style.display = 'none';
+                    btn.style.visibility = 'hidden';
+                    hiddenCount++;
+                }
+            });
+            
+            if (hiddenCount > 0) {
+                console.log('  ✅', hiddenCount, 'action button(s) hidden');
+            }
+            
+            // Method 3: Tambahkan CSS global untuk memastikan tersembunyi
+            var styleId = 'hide-draw-actions-style';
+            var existingStyle = document.getElementById(styleId);
+            
+            if (!existingStyle) {
+                var style = document.createElement('style');
+                style.id = styleId;
+                style.innerHTML = 
+                    '.leaflet-draw-actions, ' +
+                    '.leaflet-draw-actions-top, ' +
+                    '.leaflet-draw-actions-bottom { display: none !important; visibility: hidden !important; }';
+                document.head.appendChild(style);
+                console.log('  ✅ Global hide style added');
+                
+                // Hapus style setelah 500ms untuk tidak mengganggu draw actions di future
+                setTimeout(function() {
+                    var s = document.getElementById(styleId);
+                    if (s && s.parentNode) {
+                        s.parentNode.removeChild(s);
+                    }
+                }, 500);
+            }
+            
+            console.log('✅ Draw actions cleanup complete');
+            
+        } catch (err) {
+            console.error('❌ Error in hideDrawActions:', err);
+        }
+    }
+    
+    // Fungsi helper untuk attach event handlers ke layer (polygon/marker)
+    function attachDeleteEvents(layer) {
+        console.log('🔗 Attaching events to layer:', layer);
+        
+        // Click biasa - tampilkan popup dengan opsi edit/delete
+        // HANYA jika tidak sedang dalam edit/delete mode dari toolbar
+        layer.on('click', function(e) {
+            // Jika sedang dalam mode edit atau delete dari toolbar, jangan tampilkan popup
+            // Biarkan Leaflet-Draw menangani click tersebut
+            if (window._isEditMode || window._isDeleteMode) {
+                console.log('🚫 Popup dilewati - sedang dalam mode:', 
+                    window._isEditMode ? 'EDIT' : 'DELETE');
+                console.log('   Leaflet-Draw akan menangani click ini');
+                return; // Biarkan Leaflet-Draw handle click
+            }
+            
+            // Stop propagation agar tidak trigger map click
+            L.DomEvent.stopPropagation(e);
+            
+            console.log('👆 Layer clicked - showing popup options');
+            
+            var popupContent = '<div style="font-family:Arial;font-size:12px;min-width:200px;">' +
+                '<strong style="color:#1976d2;">🎯 Opsi Layer:</strong><br><br>' +
+                '<button onclick="editThisLayer()" style="width:100%;padding:10px;margin:4px 0;background:#2196F3;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">' +
+                '✏️ EDIT Layer Ini</button><br>' +
+                '<button onclick="deleteThisLayer()" style="width:100%;padding:10px;margin:4px 0;background:#f44336;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">' +
+                '🗑️ HAPUS Layer Ini</button><br>' +
+                '<small style="color:#666;display:block;margin-top:8px;line-height:1.4;">💡 Alternatif: Gunakan toolbar Edit/Delete di pojok kiri atas peta</small>' +
+                '</div>';
+            
+            // Simpan referensi layer untuk digunakan di fungsi edit/delete
+            window._currentEditingLayer = layer;
+            
+            // Buat dan buka popup
+            var popup = L.popup({
+                maxWidth: 250,
+                closeButton: true
+            })
+                .setLatLng(e.latlng)
+                .setContent(popupContent)
+                .openOn(map);
+                
+            console.log('✅ Popup displayed with edit/delete options');
+        });
+        
+        // Double-click untuk hapus cepat
+        layer.on('dblclick', function(e) {
+            L.DomEvent.stopPropagation(e);
+            console.log('👆 Double-click detected on layer');
+            
+            if (confirm('⚠️ Hapus layer ini?\n\nTindakan ini tidak bisa dibatalkan!')) {
+                window.drawnItems.removeLayer(layer);
+                
+                // Clear koordinat jika tidak ada layer tersisa
+                if (window.drawnItems.getLayers().length === 0) {
+                    document.getElementById('koordinat').value = '';
+                }
+                
+                console.log('✅ Layer deleted via double-click');
+                alert('✅ Layer berhasil dihapus!');
+                
+                // Update localStorage
+                setTimeout(function() {
+                    saveImportedLayers();
+                }, 200);
+            }
+        });
+        
+        // Right-click (context menu) untuk hapus cepat
+        layer.on('contextmenu', function(e) {
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+            
+            console.log('👆 Right-click detected on layer');
+            
+            if (confirm('⚠️ Hapus layer ini?\n\nTindakan ini tidak bisa dibatalkan!')) {
+                window.drawnItems.removeLayer(layer);
+                
+                // Clear koordinat jika tidak ada layer tersisa
+                if (window.drawnItems.getLayers().length === 0) {
+                    document.getElementById('koordinat').value = '';
+                }
+                
+                console.log('✅ Layer deleted via right-click');
+                alert('✅ Layer berhasil dihapus!');
+                
+                // Update localStorage
+                setTimeout(function() {
+                    saveImportedLayers();
+                }, 200);
+            }
+        });
+    }
+    
+    // Fungsi global untuk edit layer yang dipilih (dipanggil dari popup)
+    window.editThisLayer = function() {
+        console.log('📝 editThisLayer() called');
+        
+        if (!window._currentEditingLayer) {
+            alert('❌ Error: Tidak ada layer yang dipilih!\n\nSilakan klik layer terlebih dahulu.');
+            return;
+        }
+        
+        // Tutup popup
+        map.closePopup();
+        
+        console.log('✏️ Attempting to enable edit for layer:', window._currentEditingLayer);
+        
+        // Coba aktifkan edit mode langsung menggunakan Leaflet.Editable API
+        try {
+            // Cek apakah layer memiliki editing capability
+            if (window._currentEditingLayer.editing) {
+                // Enable editing untuk layer ini
+                window._currentEditingLayer.editing.enable();
+                console.log('✅ Edit mode enabled via layer.editing.enable()');
+                
+                // Highlight layer yang sedang di-edit
+                if (window._currentEditingLayer.setStyle) {
+                    window._currentEditingLayer._editingColor = window._currentEditingLayer.options.color;
+                    window._currentEditingLayer.setStyle({
+                        color: '#FF00FF',
+                        weight: 4,
+                        fillOpacity: 0.5
+                    });
+                    console.log('🎨 Layer style changed to edit mode (magenta)');
+                }
+                
+                // Event ketika selesai edit
+                window._currentEditingLayer.on('edit', function() {
+                    console.log('✅ Layer edit completed');
+                    // Kembalikan style
+                    if (window._currentEditingLayer.setStyle && window._currentEditingLayer._editingColor) {
+                        window._currentEditingLayer.setStyle({
+                            color: window._currentEditingLayer._editingColor,
+                            weight: 3,
+                            fillOpacity: 0.4
+                        });
+                    }
+                });
+                
+                alert('✏️ Mode Edit Aktif!\n\n' +
+                    'Sekarang Anda bisa:\n' +
+                    '• GESER titik-titik (vertices) untuk mengubah bentuk\n' +
+                    '• KLIK layer lagi atau tekan ESC untuk selesai\n\n' +
+                    '💾 Perubahan akan tersimpan otomatis!');
+            } else {
+                // Fallback: instruksi menggunakan toolbar Draw
+                console.log('⚠️ Layer tidak memiliki editing API, gunakan toolbar');
+                alert('💡 Cara Edit Layer:\n\n' +
+                    '1️⃣ Klik tombol EDIT (✏️ BIRU) di toolbar kiri atas\n' +
+                    '2️⃣ Klik layer yang ingin di-edit\n' +
+                    '3️⃣ Geser titik-titik untuk mengubah bentuk\n' +
+                    '4️⃣ Klik SAVE (💾 hijau) untuk menyimpan\n' +
+                    '5️⃣ Atau CANCEL (↩️ orange) untuk membatalkan');
+            }
+        } catch (err) {
+            console.error('❌ Edit error:', err);
+            alert('⚠️ Error saat mengaktifkan edit!\n\n' +
+                'Gunakan cara alternatif:\n' +
+                '1️⃣ Klik tombol EDIT (✏️ BIRU) di toolbar kiri atas\n' +
+                '2️⃣ Klik layer yang ingin di-edit\n' +
+                '3️⃣ Geser titik-titik untuk mengubah bentuk\n' +
+                '4️⃣ Klik SAVE (💾) untuk menyimpan');
+        }
+    };
+    
+    // Fungsi global untuk delete layer yang dipilih (dipanggil dari popup)
+    window.deleteThisLayer = function() {
+        console.log('🗑️ deleteThisLayer() called');
+        
+        if (!window._currentEditingLayer) {
+            alert('❌ Error: Tidak ada layer yang dipilih!\n\nSilakan klik layer terlebih dahulu.');
+            return;
+        }
+        
+        // Tutup popup
+        map.closePopup();
+        
+        // Konfirmasi penghapusan
+        if (confirm('⚠️ KONFIRMASI HAPUS\n\nApakah Anda yakin ingin menghapus layer ini?\n\nTindakan ini tidak bisa dibatalkan!')) {
+            try {
+                // Hapus layer dari drawnItems
+                window.drawnItems.removeLayer(window._currentEditingLayer);
+                console.log('✅ Layer removed from drawnItems');
+                
+                // Clear koordinat jika tidak ada layer tersisa
+                if (window.drawnItems.getLayers().length === 0) {
+                    document.getElementById('koordinat').value = '';
+                    console.log('📝 Form koordinat dibersihkan - tidak ada layer tersisa');
+                }
+                
+                // Reset current editing layer
+                window._currentEditingLayer = null;
+                
+                alert('✅ Layer berhasil dihapus!');
+                console.log('🗑️ Layer deleted successfully via popup button');
+                
+                // Update localStorage
+                setTimeout(function() {
+                    saveImportedLayers();
+                }, 200);
+            } catch (err) {
+                console.error('❌ Delete error:', err);
+                alert('❌ Error saat menghapus layer!\n\nSilakan coba lagi atau gunakan toolbar Delete.');
+            }
+        } else {
+            console.log('🚫 Delete cancelled by user');
+        }
+    };
+    
+    // Event map click - hanya aktif jika tidak sedang drawing atau edit mode
+    map.on('click', function(e) {
+        // Skip jika sedang dalam mode edit/delete atau sedang drawing
+        if (window._isEditMode || window._isDeleteMode || map._drawingMode) {
+            console.log('🚫 Map click ignored - mode aktif:', 
+                window._isEditMode ? 'EDIT' : window._isDeleteMode ? 'DELETE' : 'DRAWING');
+            return;
+        }
+        
+        var latlng = e.latlng;
+        document.getElementById('koordinat').value = latlng.lat.toFixed(6) + ',' + latlng.lng.toFixed(6);
+        // Jangan hapus marker lain, hanya tambahkan marker baru
+        var marker = L.marker(latlng);
+        attachDeleteEvents(marker);
+        window.drawnItems.addLayer(marker);
+        console.log('📍 Marker added via map click');
+    });
+    
+    // Event handler untuk L.Draw - CREATED (ketika selesai membuat polygon/marker)
+    map.on(L.Draw.Event.CREATED, function (e) {
+        var layer = e.layer;
+        var layerType = e.layerType;
+        
+        console.log('🎨 Draw created event triggered:', layerType);
+        
+        // Simpan warna asli untuk polygon
+        if (layerType === 'polygon' && layer.options && layer.options.color) {
+            layer._originalColor = layer.options.color;
+            console.log('💾 Warna polygon disimpan:', layer._originalColor);
+        }
+        
+        // Set koordinat ke form
+        try {
+            if (layerType === 'marker') {
+                var latlng = layer.getLatLng();
+                document.getElementById('koordinat').value = latlng.lat.toFixed(6) + ',' + latlng.lng.toFixed(6);
+                console.log('📍 Koordinat marker:', latlng.lat.toFixed(6), latlng.lng.toFixed(6));
+            } else if (layerType === 'polygon') {
+                var latlngs = layer.getLatLngs()[0];
+                if (latlngs && latlngs.length > 0) {
+                    var coordStr = latlngs.map(function(ll) {
+                        return ll.lat.toFixed(6) + ',' + ll.lng.toFixed(6);
+                    });
+                    document.getElementById('koordinat').value = coordStr.join(' | ');
+                    console.log('🔷 Polygon dengan', latlngs.length, 'titik dibuat');
+                }
+            }
+        } catch (err) {
+            console.error('❌ Error setting koordinat:', err);
+        }
+        
+        // Attach delete events untuk interaksi manual
+        attachDeleteEvents(layer);
+        
+        // Tambahkan layer ke drawnItems FeatureGroup
+        window.drawnItems.addLayer(layer);
+        
+        console.log('✅ Layer berhasil ditambahkan ke drawnItems');
+        console.log('📊 Total layers sekarang:', window.drawnItems.getLayers().length);
+        
+        // PENTING: Simpan ke localStorage jika ini imported layer atau manual drawing
+        setTimeout(function() {
+            saveImportedLayers();
+        }, 300);
+        
+        // Notifikasi bahwa layer berhasil dibuat
+        if (window.drawnItems.getLayers().length === 1) {
+            setTimeout(function() {
+                alert('✅ ' + (layerType === 'polygon' ? 'Polygon' : 'Marker') + ' berhasil dibuat!\n\n' +
+                    '💡 Tombol EDIT (✏️ BIRU) dan DELETE (🗑️ MERAH) sekarang aktif di toolbar!\n\n' +
+                    'Atau klik langsung pada ' + (layerType === 'polygon' ? 'polygon' : 'marker') + ' untuk opsi cepat.');
+            }, 300);
+        }
+    });
+    
+    // Event ketika layer di-edit (EDITED - setelah save)
+    map.on(L.Draw.Event.EDITED, function(e) {
+        var layers = e.layers;
+        var count = 0;
+        
+        console.log('✏️ Edit completed, processing edited layers...');
+        
+        layers.eachLayer(function(layer) {
+            count++;
+            
+            // Reset style ke normal setelah edit untuk polygon
+            if (layer.setStyle) {
+                try {
+                    // Kembalikan ke warna asli atau default
+                    var origColor = layer._originalColor || '#2e7d32';
+                    layer.setStyle({
+                        color: origColor,
+                        weight: 3,
+                        opacity: 0.8,
+                        fillOpacity: 0.4
+                    });
+                    console.log('🎨 Style reset untuk layer:', origColor);
+                } catch (err) {
+                    console.error('❌ Error resetting style:', err);
+                }
+            }
+            
+            // Update koordinat di form
+            try {
+                if (layer instanceof L.Polygon && layer.getLatLngs) {
+                    var latlngs = layer.getLatLngs()[0];
+                    if (latlngs && latlngs.length > 0) {
+                        var coordStr = latlngs.map(function(ll) {
+                            return ll.lat.toFixed(6) + ',' + ll.lng.toFixed(6);
+                        });
+                        document.getElementById('koordinat').value = coordStr.join(' | ');
+                        console.log('📝 Koordinat polygon diupdate:', latlngs.length, 'titik');
+                    }
+                } else if (layer instanceof L.Marker && layer.getLatLng) {
+                    var latlng = layer.getLatLng();
+                    document.getElementById('koordinat').value = latlng.lat.toFixed(6) + ',' + latlng.lng.toFixed(6);
+                    console.log('📝 Koordinat marker diupdate');
+                }
+            } catch (err) {
+                console.error('❌ Error updating koordinat:', err);
+            }
+        });
+        
+        console.log('✅', count, 'layer(s) edited and saved');
+        
+        // PENTING: Hapus tombol Save/Cancel yang masih muncul
+        setTimeout(function() {
+            hideDrawActions();
+        }, 100);
+        
+        // PENTING: Simpan ke localStorage setelah edit
+        setTimeout(function() {
+            saveImportedLayers();
+        }, 200);
+        
+        if (count > 0) {
+            alert('✅ Berhasil mengedit ' + count + ' ' + (count > 1 ? 'items' : 'item') + '!\n\n' +
+                'Perubahan telah disimpan.\n' +
+                'Koordinat baru telah diupdate di form.');
+        }
+    });
+    
+    // Event ketika layer di-delete via toolbar DELETE button
+    map.on(L.Draw.Event.DELETED, function(e) {
+        var layers = e.layers;
+        var count = 0;
+        
+        layers.eachLayer(function(layer) { 
+            count++; 
+            console.log('🗑️ Layer deleted:', layer);
+        });
+        
+        console.log('✅', count, 'layer(s) deleted via toolbar');
+        
+        // Clear koordinat jika semua layer dihapus
+        if (window.drawnItems.getLayers().length === 0) {
+            document.getElementById('koordinat').value = '';
+            console.log('📝 Form koordinat dibersihkan - tidak ada layer tersisa');
+        }
+        
+        // PENTING: Hapus tombol Delete/Cancel yang masih muncul
+        setTimeout(function() {
+            hideDrawActions();
+        }, 100);
+        
+        if (count > 0) {
+            alert('✅ Berhasil menghapus ' + count + ' ' + (count > 1 ? 'items' : 'item') + '!');
+        }
+        
+        // Update localStorage
+        setTimeout(function() {
+            saveImportedLayers();
+        }, 200);
+    });
+    
+    // Event ketika mulai edit mode via toolbar (tombol Edit diklik)
+    map.on(L.Draw.Event.EDITSTART, function() {
+        window._isEditMode = true;
+        window._isDeleteMode = false;
+        console.log('🎨 ===== EDIT MODE STARTED =====');
+        console.log('💡 Sekarang klik polygon/marker yang ingin diedit');
+        console.log('⌨️ Tekan ESC untuk keluar dari mode edit');
+        
+        // Tampilkan instruksi setelah delay singkat
+        setTimeout(function() {
+            var msg = '✏️ MODE EDIT AKTIF!\n\n' +
+                'Cara edit:\n' +
+                '1️⃣ KLIK polygon/marker yang ingin diedit\n' +
+                '2️⃣ GESER titik-titik (vertices) untuk mengubah bentuk\n' +
+                '3️⃣ Klik SAVE (💾 hijau) untuk menyimpan\n' +
+                '4️⃣ Klik CANCEL (↩️ orange) untuk membatalkan\n' +
+                '5️⃣ Atau tekan tombol ESC untuk keluar\n\n' +
+                '💡 Tombol SAVE/CANCEL muncul setelah Anda klik layer!';
+            alert(msg);
+        }, 200);
+    });
+    
+    // Event ketika keluar dari edit mode (EDITSTOP)
+    map.on(L.Draw.Event.EDITSTOP, function() {
+        window._isEditMode = false;
+        console.log('🎨 ===== EDIT MODE STOPPED =====');
+        console.log('✅ Kembali ke mode normal');
+        
+        // Pastikan semua layer kembali ke style normal
+        if (window.drawnItems) {
+            window.drawnItems.eachLayer(function(layer) {
+                if (layer.setStyle && layer._originalColor) {
+                    layer.setStyle({
+                        color: layer._originalColor,
+                        weight: 3,
+                        opacity: 0.8,
+                        fillOpacity: 0.4
+                    });
+                }
+            });
+        }
+        
+        // Hapus tombol Save/Cancel
+        setTimeout(function() {
+            hideDrawActions();
+        }, 100);
+    });
+    
+    // Event ketika mulai delete mode via toolbar (tombol Delete diklik)
+    map.on(L.Draw.Event.DELETESTART, function() {
+        window._isDeleteMode = true;
+        window._isEditMode = false;
+        console.log('🗑️ ===== DELETE MODE STARTED =====');
+        console.log('💡 Sekarang klik polygon/marker untuk memilih, lalu klik DELETE');
+        console.log('⌨️ Tekan ESC untuk keluar dari mode delete');
+        
+        // Tampilkan instruksi
+        setTimeout(function() {
+            var msg = '🗑️ MODE DELETE AKTIF!\n\n' +
+                'Cara hapus:\n' +
+                '1️⃣ KLIK polygon/marker yang ingin dihapus\n' +
+                '   (Anda bisa pilih beberapa sekaligus)\n' +
+                '2️⃣ Klik DELETE (🗑️ merah) untuk konfirmasi hapus\n' +
+                '3️⃣ Klik CANCEL (↩️ orange) untuk membatalkan\n' +
+                '4️⃣ Atau tekan tombol ESC untuk keluar\n\n' +
+                '💡 Tombol muncul di toolbar setelah memilih layer!';
+            alert(msg);
+        }, 200);
+    });
+    
+    // Event ketika keluar dari delete mode (DELETESTOP)
+    map.on(L.Draw.Event.DELETESTOP, function() {
+        window._isDeleteMode = false;
+        console.log('🗑️ ===== DELETE MODE STOPPED =====');
+        console.log('✅ Kembali ke mode normal');
+        
+        // Hapus tombol Delete/Cancel
+        setTimeout(function() {
+            hideDrawActions();
+        }, 100);
+    });
+    
+    // Event ketika mulai menggambar (DRAWSTART) - untuk polygon, marker, dll
+    map.on(L.Draw.Event.DRAWSTART, function(e) {
+        console.log('🎨 ===== DRAW MODE STARTED =====');
+        console.log('   Type:', e.layerType);
+        map._drawingMode = true;
+        window._isEditMode = false;
+        window._isDeleteMode = false;
+    });
+    
+    // Event ketika berhenti menggambar (DRAWSTOP)
+    map.on(L.Draw.Event.DRAWSTOP, function(e) {
+        console.log('🎨 ===== DRAW MODE STOPPED =====');
+        map._drawingMode = false;
+    });
+    
+    // Keyboard event handler untuk ESC key - keluar dari mode edit/delete
+    document.addEventListener('keydown', function(e) {
+        // ESC key (keyCode 27)
+        if (e.key === 'Escape' || e.keyCode === 27) {
+            console.log('⌨️ ESC key pressed');
+            
+            // Jika sedang dalam mode edit
+            if (window._isEditMode) {
+                console.log('🚪 Keluar dari EDIT mode via ESC');
+                
+                // Coba disable edit mode dengan berbagai cara
+                try {
+                    // Method 1: Trigger toolbar cancel button
+                    var cancelBtn = document.querySelector('.leaflet-draw-actions-bottom a[title*="Cancel"], .leaflet-draw-actions a[title*="Cancel"]');
+                    if (cancelBtn) {
+                        console.log('   → Clicking cancel button');
+                        cancelBtn.click();
+                    }
+                    
+                    // Method 2: Disable edit pada semua layers
+                    if (window.drawnItems) {
+                        window.drawnItems.eachLayer(function(layer) {
+                            if (layer.editing && layer.editing.enabled && layer.editing.enabled()) {
+                                console.log('   → Disabling edit on layer');
+                                layer.editing.disable();
+                            }
+                        });
+                    }
+                    
+                    // Method 3: Manual reset flag
+                    window._isEditMode = false;
+                    console.log('✅ Edit mode disabled via ESC');
+                    
+                    // Hapus tombol Save/Cancel
+                    setTimeout(function() {
+                        hideDrawActions();
+                    }, 100);
+                    
+                } catch (err) {
+                    console.error('❌ Error disabling edit mode:', err);
+                }
+            }
+            
+            // Jika sedang dalam mode delete
+            if (window._isDeleteMode) {
+                console.log('🚪 Keluar dari DELETE mode via ESC');
+                
+                try {
+                    // Trigger toolbar cancel button
+                    var cancelBtn = document.querySelector('.leaflet-draw-actions-bottom a[title*="Cancel"], .leaflet-draw-actions a[title*="Cancel"]');
+                    if (cancelBtn) {
+                        console.log('   → Clicking cancel button');
+                        cancelBtn.click();
+                    }
+                    
+                    // Manual reset flag
+                    window._isDeleteMode = false;
+                    console.log('✅ Delete mode disabled via ESC');
+                    
+                    // Hapus tombol Delete/Cancel
+                    setTimeout(function() {
+                        hideDrawActions();
+                    }, 100);
+                    
+                } catch (err) {
+                    console.error('❌ Error disabling delete mode:', err);
+                }
+            }
+            
+            // Jika sedang drawing
+            if (map._drawingMode) {
+                console.log('🚪 Keluar dari DRAW mode via ESC');
+                map._drawingMode = false;
+            }
+        }
+    });
+    
+    // Expose fungsi attachDeleteEvents untuk digunakan di tempat lain
+    window.attachDeleteEvents = attachDeleteEvents;
+    
+    // clearLayers di event peta tidak diperlukan
     if (!map._lokasiControlAdded) {
             // Tombol Bersihkan Koordinat/Polygon
             var btnBersihkan = document.getElementById('btn-bersihkan-koordinat');
@@ -874,6 +2272,613 @@ function afterMapInit() {
     }
     // Pastikan marker data lokasi langsung muncul setelah peta siap
     renderTabelLokasi();
+    renderPolygonLayer();
+}
+
+// === FUNGSI POLYGON ===
+function parseKMLPolygon(kmlText) {
+    try {
+        console.log('🔍 Parsing KML file...');
+        
+        // Clean up namespace issues yang sering terjadi di KML dari berbagai software
+        var cleanedKML = kmlText
+            // Tambahkan namespace xsi jika digunakan tapi tidak didefinisikan
+            .replace(/<kml([^>]*?)>/i, function(match, attrs) {
+                if (attrs.includes('xsi:') && !attrs.includes('xmlns:xsi')) {
+                    return '<kml' + attrs + ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">';
+                }
+                return match;
+            })
+            // Tambahkan namespace xmlns jika belum ada
+            .replace(/<Document([^>]*?)>/i, function(match, attrs) {
+                if (attrs.includes('xsi:') && !attrs.includes('xmlns:xsi')) {
+                    return '<Document' + attrs + ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">';
+                }
+                return match;
+            });
+        
+        var parser = new DOMParser();
+        var xmlDoc = parser.parseFromString(cleanedKML, 'text/xml');
+        
+        // Check for parser errors
+        var parserError = xmlDoc.getElementsByTagName('parsererror');
+        if (parserError.length > 0) {
+            console.warn('⚠️ XML Parser mengalami masalah, mencoba metode alternatif...');
+            console.error('Parser Error:', parserError[0].textContent);
+            
+            // Metode alternatif: parse secara manual dengan regex
+            return parseKMLManual(kmlText);
+        }
+        
+        var polygons = [];
+        var points = [];
+        var placemarks = xmlDoc.getElementsByTagName('Placemark');
+        
+        console.log('📍 Found', placemarks.length, 'placemarks');
+        
+        for (var i = 0; i < placemarks.length; i++) {
+            var placemark = placemarks[i];
+            var name = placemark.getElementsByTagName('name')[0]?.textContent || 'Lokasi ' + (i+1);
+            var description = placemark.getElementsByTagName('description')[0]?.textContent || '';
+            
+            // Cek apakah ini Polygon
+            var polygonElements = placemark.getElementsByTagName('Polygon');
+            if (polygonElements.length > 0) {
+                // Ambil coordinates dari outerBoundaryIs atau langsung dari Polygon
+                var coordElements = polygonElements[0].getElementsByTagName('coordinates');
+                if (coordElements.length > 0) {
+                    var coordinates = coordElements[0].textContent.trim();
+                    
+                    if (coordinates) {
+                        // Parse koordinat: "lng,lat,alt lng,lat,alt" atau dengan line breaks
+                        var coords = coordinates.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).map(function(coord) {
+                            var parts = coord.trim().split(',');
+                            if (parts.length >= 2) {
+                                return [parseFloat(parts[1]), parseFloat(parts[0])]; // [lat, lng]
+                            }
+                            return null;
+                        }).filter(function(c) { return c && !isNaN(c[0]) && !isNaN(c[1]); });
+                        
+                        if (coords.length >= 3) {
+                            console.log('✅ Found polygon:', name, 'with', coords.length, 'points');
+                            polygons.push({
+                                name: name,
+                                description: description,
+                                coordinates: coords,
+                                type: 'polygon'
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Cek apakah ini Point (untuk marker biasa)
+            var pointElements = placemark.getElementsByTagName('Point');
+            if (pointElements.length > 0) {
+                var coordElements = pointElements[0].getElementsByTagName('coordinates');
+                if (coordElements.length > 0) {
+                    var coordinates = coordElements[0].textContent.trim();
+                    var parts = coordinates.split(',');
+                    if (parts.length >= 2) {
+                        var lat = parseFloat(parts[1]);
+                        var lng = parseFloat(parts[0]);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            console.log('✅ Found point:', name);
+                            points.push({
+                                name: name,
+                                description: description,
+                                coordinates: [[lat, lng]],
+                                type: 'point'
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        console.log('📊 Total polygons:', polygons.length, 'points:', points.length);
+        
+        // Gabungkan polygon dan point
+        return polygons.concat(points);
+    } catch (err) {
+        console.error('❌ Error parsing KML:', err);
+        console.log('🔄 Mencoba metode parsing manual...');
+        return parseKMLManual(kmlText);
+    }
+}
+
+// Metode parsing manual jika DOMParser gagal
+function parseKMLManual(kmlText) {
+    try {
+        console.log('🔧 Parsing KML secara manual dengan regex...');
+        var features = [];
+        
+        // Regex untuk mencari Placemark
+        var placemarkRegex = /<Placemark[^>]*>([\s\S]*?)<\/Placemark>/gi;
+        var placemarks = kmlText.match(placemarkRegex);
+        
+        if (!placemarks || placemarks.length === 0) {
+            console.error('❌ Tidak ada Placemark ditemukan');
+            return [];
+        }
+        
+        console.log('📍 Found', placemarks.length, 'placemarks via regex');
+        
+        placemarks.forEach(function(placemarkContent, idx) {
+            // Extract name
+            var nameMatch = placemarkContent.match(/<name[^>]*>(.*?)<\/name>/i);
+            var name = nameMatch ? nameMatch[1].trim() : 'Lokasi ' + (idx + 1);
+            
+            // Extract description
+            var descMatch = placemarkContent.match(/<description[^>]*>(.*?)<\/description>/i);
+            var description = descMatch ? descMatch[1].trim() : '';
+            
+            // Check for Polygon
+            var polygonMatch = placemarkContent.match(/<Polygon[^>]*>([\s\S]*?)<\/Polygon>/i);
+            if (polygonMatch) {
+                var coordMatch = polygonMatch[1].match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);
+                if (coordMatch) {
+                    var coordText = coordMatch[1].trim();
+                    var coords = coordText.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).map(function(coord) {
+                        var parts = coord.trim().split(',');
+                        if (parts.length >= 2) {
+                            return [parseFloat(parts[1]), parseFloat(parts[0])]; // [lat, lng]
+                        }
+                        return null;
+                    }).filter(function(c) { return c && !isNaN(c[0]) && !isNaN(c[1]); });
+                    
+                    if (coords.length >= 3) {
+                        console.log('✅ Found polygon via regex:', name, 'with', coords.length, 'points');
+                        features.push({
+                            name: name,
+                            description: description,
+                            coordinates: coords,
+                            type: 'polygon'
+                        });
+                    }
+                }
+            }
+            
+            // Check for Point
+            var pointMatch = placemarkContent.match(/<Point[^>]*>([\s\S]*?)<\/Point>/i);
+            if (pointMatch) {
+                var coordMatch = pointMatch[1].match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);
+                if (coordMatch) {
+                    var coordText = coordMatch[1].trim();
+                    var parts = coordText.split(',');
+                    if (parts.length >= 2) {
+                        var lat = parseFloat(parts[1]);
+                        var lng = parseFloat(parts[0]);
+                        if (!isNaN(lat) && !isNaN(lng)) {
+                            console.log('✅ Found point via regex:', name);
+                            features.push({
+                                name: name,
+                                description: description,
+                                coordinates: [[lat, lng]],
+                                type: 'point'
+                            });
+                        }
+                    }
+                }
+            }
+        });
+        
+        console.log('📊 Manual parsing result:', features.length, 'features');
+        return features;
+    } catch (err) {
+        console.error('❌ Manual parsing juga gagal:', err);
+        alert('❌ Gagal membaca file KML!\n\nFile mungkin rusak atau format tidak didukung.\n\nError: ' + err.message);
+        return [];
+    }
+}
+
+// Parse KMZ (KML dalam file ZIP)
+function parseKMZ(file, callback) {
+    console.log('📦 Parsing KMZ file...');
+    
+    if (typeof JSZip === 'undefined') {
+        alert('❌ Library JSZip belum dimuat!\n\nRefresh halaman dan coba lagi.');
+        return callback([]);
+    }
+    
+    JSZip.loadAsync(file).then(function(zip) {
+        console.log('✅ ZIP loaded, files:', Object.keys(zip.files).length);
+        
+        // Cari file KML dalam ZIP (biasanya doc.kml)
+        var kmlFile = null;
+        var kmlFilename = null;
+        
+        Object.keys(zip.files).forEach(function(filename) {
+            if (filename.toLowerCase().endsWith('.kml')) {
+                kmlFile = zip.files[filename];
+                kmlFilename = filename;
+            }
+        });
+        
+        if (!kmlFile) {
+            alert('❌ Tidak ada file KML ditemukan dalam KMZ!');
+            return callback([]);
+        }
+        
+        console.log('📄 Found KML file:', kmlFilename);
+        
+        // Extract dan parse KML
+        kmlFile.async('string').then(function(kmlContent) {
+            console.log('✅ KML extracted, parsing...');
+            var features = parseKMLPolygon(kmlContent);
+            callback(features);
+        }).catch(function(err) {
+            console.error('❌ Error extracting KML:', err);
+            alert('❌ Gagal extract KML dari KMZ!\n\nError: ' + err.message);
+            callback([]);
+        });
+    }).catch(function(err) {
+        console.error('❌ Error reading KMZ:', err);
+        alert('❌ Gagal membaca file KMZ!\n\nError: ' + err.message);
+        callback([]);
+    });
+}
+
+// Parse Shapefile (ZIP dengan .shp, .dbf, .shx)
+function parseShapefile(file, callback) {
+    console.log('🗺️ Parsing Shapefile...');
+    
+    if (typeof shp === 'undefined') {
+        alert('❌ Library shpjs belum dimuat!\n\nRefresh halaman dan coba lagi.');
+        return callback([]);
+    }
+    
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var arrayBuffer = e.target.result;
+        
+        shp(arrayBuffer).then(function(geojson) {
+            console.log('✅ Shapefile parsed to GeoJSON');
+            
+            // Convert GeoJSON object ke string, lalu parse
+            var geojsonText = JSON.stringify(geojson);
+            var features = parseGeoJSONPolygon(geojsonText);
+            callback(features);
+        }).catch(function(err) {
+            console.error('❌ Error parsing Shapefile:', err);
+            alert('❌ Gagal membaca Shapefile!\n\nPastikan ZIP berisi .shp, .dbf, dan .shx\n\nError: ' + err.message);
+            callback([]);
+        });
+    };
+    
+    reader.onerror = function() {
+        console.error('❌ File reader error');
+        alert('❌ Gagal membaca file!');
+        callback([]);
+    };
+    
+    reader.readAsArrayBuffer(file);
+}
+
+function parseGeoJSONPolygon(geojsonText) {
+    try {
+        console.log('🔍 Parsing GeoJSON file...');
+        var geojson = JSON.parse(geojsonText);
+        var polygons = [];
+        
+        function processFeature(feature, index) {
+            if (!feature.geometry) {
+                console.warn('⚠️ Feature', index, 'tidak memiliki geometry');
+                return;
+            }
+            
+            var name = (feature.properties?.name || feature.properties?.title || feature.properties?.Name || 'Lokasi ' + (index+1));
+            var description = (feature.properties?.description || feature.properties?.desc || '');
+            var coords = [];
+            var type = 'polygon';
+            
+            if (feature.geometry.type === 'Polygon') {
+                // Polygon: coordinates[0] adalah outer ring
+                coords = feature.geometry.coordinates[0].map(function(c) {
+                    return [c[1], c[0]]; // [lat, lng]
+                });
+                console.log('✅ Found Polygon:', name, 'with', coords.length, 'points');
+            } else if (feature.geometry.type === 'MultiPolygon') {
+                // MultiPolygon: ambil polygon pertama
+                coords = feature.geometry.coordinates[0][0].map(function(c) {
+                    return [c[1], c[0]]; // [lat, lng]
+                });
+                console.log('✅ Found MultiPolygon:', name);
+            } else if (feature.geometry.type === 'Point') {
+                // Point
+                coords = [[feature.geometry.coordinates[1], feature.geometry.coordinates[0]]];
+                type = 'point';
+                console.log('✅ Found Point:', name);
+            } else if (feature.geometry.type === 'LineString') {
+                // LineString (bisa di-convert jadi polygon jika closed)
+                coords = feature.geometry.coordinates.map(function(c) {
+                    return [c[1], c[0]];
+                });
+                console.log('✅ Found LineString:', name);
+            }
+            
+            if (coords.length >= 1) {
+                polygons.push({
+                    name: name,
+                    description: description,
+                    coordinates: coords,
+                    type: type
+                });
+            }
+        }
+        
+        if (geojson.type === 'FeatureCollection') {
+            console.log('📊 FeatureCollection with', geojson.features.length, 'features');
+            geojson.features.forEach(processFeature);
+        } else if (geojson.type === 'Feature') {
+            console.log('📊 Single Feature');
+            processFeature(geojson, 0);
+        } else if (geojson.type === 'Polygon' || geojson.type === 'MultiPolygon' || geojson.type === 'Point') {
+            // Direct geometry object
+            console.log('📊 Direct geometry:', geojson.type);
+            processFeature({geometry: geojson, properties: {}}, 0);
+        }
+        
+        console.log('📊 Total features parsed:', polygons.length);
+        return polygons;
+    } catch (err) {
+        console.error('❌ Error parsing GeoJSON:', err);
+        alert('❌ Gagal membaca file GeoJSON!\n\nError: ' + err.message);
+        return [];
+    }
+}
+
+function importPolygonFile(file) {
+    console.log('📂 Reading file:', file.name, 'size:', (file.size/1024).toFixed(2) + 'KB');
+    
+    var fileName = file.name.toLowerCase();
+    
+    // Handler untuk menampilkan hasil import
+    function displayFeatures(polygons) {
+        if (polygons.length === 0) {
+            alert('❌ Tidak ada polygon/point ditemukan dalam file!\n\nPastikan file berformat yang valid.\n\nCek browser console (F12) untuk detail error.');
+            return;
+        }
+        
+        console.log('✅ Berhasil parse', polygons.length, 'feature dari file');
+        
+        var importedCount = 0;
+        var firstFeature = null;
+        
+        // Tampilkan polygon/point di peta
+        polygons.forEach(function(poly, idx) {
+            var color = polygonColors[currentPolygonIndex++ % polygonColors.length];
+            var layer = null;
+            
+            // Cek apakah polygon atau point
+            if (poly.type === 'point' || poly.coordinates.length === 1) {
+                // Marker/Point
+                var coords = poly.coordinates[0];
+                layer = L.marker(coords);
+            } else {
+                // Polygon
+                layer = L.polygon(poly.coordinates, {
+                    color: color,
+                    weight: 2,
+                    opacity: 0.7,
+                    fillColor: color,
+                    fillOpacity: 0.3
+                });
+                
+                // Simpan warna asli untuk restore setelah edit
+                layer._originalColor = color;
+                
+                layer.on('mouseover', function() {
+                    this.setStyle({weight: 3, opacity: 1, fillOpacity: 0.5});
+                });
+                layer.on('mouseout', function() {
+                    this.setStyle({weight: 2, opacity: 0.7, fillOpacity: 0.3});
+                });
+                
+                // Tambahkan label permanen di tengah polygon
+                layer.bindTooltip(poly.name, {
+                    permanent: true,
+                    direction: 'center',
+                    className: 'polygon-label'
+                });
+            }
+            
+            if (layer) {
+                var popupContent = '<div style="font-size:12px;"><strong>' + poly.name + '</strong><br>';
+                if (poly.description) {
+                    // Remove HTML tags if any
+                    var desc = poly.description.replace(/<[^>]*>/g, '');
+                    if (desc.length > 100) desc = desc.substring(0, 100) + '...';
+                    popupContent += desc + '<br>';
+                }
+                popupContent += '<em style="color:#1976d2;">Import dari ' + file.name + '</em></div>';
+                layer.bindPopup(popupContent);
+                
+                // PENTING: Tandai layer sebagai imported layer
+                layer._isImported = true;
+                layer._importedName = poly.name;
+                layer._importedDescription = poly.description || '';
+                layer._importedSource = 'Import dari ' + file.name;
+                
+                // Attach delete events untuk layer import
+                if (window.attachDeleteEvents) {
+                    window.attachDeleteEvents(layer);
+                }
+                
+                // Tambahkan ke drawnItems agar bisa di-edit/delete via toolbar
+                if (window.drawnItems) {
+                    window.drawnItems.addLayer(layer);
+                } else {
+                    polygonLayer.addTo(layer);
+                }
+                importedCount++;
+                
+                // Simpan feature pertama
+                if (!firstFeature) {
+                    firstFeature = {layer: layer, data: poly};
+                }
+            }
+        });
+        
+        // Jika ada feature, zoom dan isi form
+        if (firstFeature) {
+            // Zoom ke feature pertama
+            if (firstFeature.data.type === 'point' || firstFeature.data.coordinates.length === 1) {
+                map.setView(firstFeature.data.coordinates[0], 15);
+            } else {
+                map.fitBounds(firstFeature.layer.getBounds());
+            }
+            
+            // Isi form dengan data feature pertama (hanya jika polygon)
+            if (firstFeature.data.type !== 'point' && firstFeature.data.coordinates.length > 1) {
+                var coordString = firstFeature.data.coordinates.map(function(c) {
+                    return c[0].toFixed(6) + ',' + c[1].toFixed(6);
+                }).join(' | ');
+                document.getElementById('koordinat').value = coordString;
+                
+                // Isi nama jika belum ada
+                if (!document.getElementById('nama').value) {
+                    document.getElementById('nama').value = firstFeature.data.name;
+                }
+                if (!document.getElementById('deskripsi').value && firstFeature.data.description) {
+                    var desc = firstFeature.data.description.replace(/<[^>]*>/g, '');
+                    document.getElementById('deskripsi').value = desc;
+                }
+            }
+        }
+        
+        var message = '✅ Berhasil import ' + importedCount + ' feature dari file!\n\n';
+        if (importedCount > 1) {
+            message += 'Semua feature ditampilkan di peta.\n';
+            message += 'Koordinat polygon pertama sudah diisi ke form.\n\n';
+        } else {
+            message += 'Feature ditampilkan di peta.\n\n';
+        }
+        // HIDDEN: Instruksi cara hapus drawing
+        // message += '💡 Cara hapus drawing:\n';
+        // message += '• Double-click pada polygon/marker\n';
+        // message += '• Klik kanan pada polygon/marker\n';
+        // message += '• Atau gunakan toolbar Edit (✏️)';
+        alert(message);
+        
+        // PENTING: Simpan imported layers ke localStorage
+        setTimeout(function() {
+            saveImportedLayers();
+        }, 500);
+    }
+    
+    // Deteksi format dan proses sesuai format
+    if (fileName.endsWith('.kmz')) {
+        // KMZ (KML terkompress)
+        console.log('🔍 Detected KMZ format');
+        parseKMZ(file, displayFeatures);
+    } else if (fileName.endsWith('.shp') || (fileName.endsWith('.zip') && file.size > 0)) {
+        // Shapefile (ZIP dengan .shp, .dbf, .shx)
+        console.log('🔍 Detected Shapefile/ZIP format');
+        parseShapefile(file, displayFeatures);
+    } else if (fileName.endsWith('.kml')) {
+        // KML biasa
+        console.log('🔍 Detected KML format');
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var content = e.target.result;
+            var polygons = parseKMLPolygon(content);
+            displayFeatures(polygons);
+        };
+        reader.onerror = function() {
+            alert('❌ Gagal membaca file!');
+        };
+        reader.readAsText(file);
+    } else if (fileName.endsWith('.geojson') || fileName.endsWith('.json')) {
+        // GeoJSON
+        console.log('🔍 Detected GeoJSON format');
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var content = e.target.result;
+            var polygons = parseGeoJSONPolygon(content);
+            displayFeatures(polygons);
+        };
+        reader.onerror = function() {
+            alert('❌ Gagal membaca file!');
+        };
+        reader.readAsText(file);
+    } else {
+        alert('❌ Format file tidak didukung!\n\nGunakan file: .kml, .kmz, .geojson, .json, atau .zip (shapefile)');
+        return;
+    }
+}
+
+function createPolygonFromCoordinates(coordinateString, data) {
+    // Parse koordinat: "lat1,lng1 | lat2,lng2 | lat3,lng3"
+    if (!coordinateString || coordinateString.trim() === '') return null;
+    
+    var parts = coordinateString.split('|').map(function(part) {
+        var coords = part.trim().split(',');
+        return [parseFloat(coords[0]), parseFloat(coords[1])];
+    });
+    
+    if (parts.length < 3) return null; // Polygon minimum 3 titik
+    
+    // Ambil warna berdasarkan data atau cycling dari warna default
+    var color = polygonColors[currentPolygonIndex++ % polygonColors.length];
+    
+    var polygon = L.polygon(parts, {
+        color: color,
+        weight: 2,
+        opacity: 0.7,
+        fillColor: color,
+        fillOpacity: 0.3,
+        className: 'polygon-survey'
+    });
+    
+    // Tambahkan popup dengan informasi data
+    if (data) {
+        var popupContent = '<div style="font-size:12px;"><strong>' + (data.nama || 'Lokasi') + '</strong><br>' +
+            'Kegiatan: ' + (data.jenis_kegiatan || '-') + '<br>' +
+            'Luas/Volume: ' + (data.luas || '-') + '<br>' +
+            'Deskripsi: ' + (data.deskripsi || '-') + '<br>' +
+            'Gapoktan: ' + (data.gapoktan || '-') + '</div>';
+        polygon.bindPopup(popupContent);
+    }
+    
+    // Hover effect
+    polygon.on('mouseover', function() {
+        this.setStyle({weight: 3, opacity: 1, fillOpacity: 0.5});
+    });
+    polygon.on('mouseout', function() {
+        this.setStyle({weight: 2, opacity: 0.7, fillOpacity: 0.3});
+    });
+    
+    // Tambahkan label permanen jika ada data nama
+    if (data && data.nama) {
+        polygon.bindTooltip(data.nama, {
+            permanent: true,
+            direction: 'center',
+            className: 'polygon-label'
+        });
+    }
+    
+    return polygon;
+}
+
+function renderPolygonLayer() {
+    // Bersihkan layer polygon sebelumnya
+    polygonLayer.clearLayers();
+    currentPolygonIndex = 0;
+    
+    // Ambil semua data survey dan buat polygon
+    getAllSurvey().then(function(allData) {
+        allData.forEach(function(item) {
+            // Jika koordinat berisi pipe (|), maka itu polygon
+            if (item.koordinat && item.koordinat.includes('|')) {
+                var polygon = createPolygonFromCoordinates(item.koordinat, item);
+                if (polygon) {
+                    polygon.addTo(polygonLayer);
+                }
+            }
+        });
+        console.log('✅ Polygon layer diperbarui:', polygonLayer.getLayers().length, 'polygon ditampilkan');
+    });
 }
 
 // === FORM HANDLER ===
@@ -913,6 +2918,187 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     // Tombol "Gunakan Lokasi Saat Ini" untuk Android
+    // Import polygon file handler
+    document.getElementById('import-polygon').addEventListener('change', function(e) {
+        var file = this.files && this.files[0];
+        if (file) {
+            importPolygonFile(file);
+            // Reset input setelah import
+            this.value = '';
+        }
+    });
+    
+    // Tombol Hapus Semua Drawing
+    document.getElementById('btn-hapus-semua-drawing').addEventListener('click', function() {
+        if (!window.drawnItems || window.drawnItems.getLayers().length === 0) {
+            alert('ℹ️ Tidak ada drawing untuk dihapus.');
+            return;
+        }
+        
+        var count = window.drawnItems.getLayers().length;
+        var confirmMsg = '⚠️ Hapus SEMUA drawing?\n\n' +
+            'Total: ' + count + ' polygon/marker akan dihapus.\n\n' +
+            'Tindakan ini tidak dapat dibatalkan!';
+        
+        if (confirm(confirmMsg)) {
+            window.drawnItems.clearLayers();
+            document.getElementById('koordinat').value = '';
+            console.log('🗑️ All drawings cleared:', count, 'items deleted');
+            alert('✅ Berhasil menghapus ' + count + ' drawing!');
+            
+            // Update localStorage
+            setTimeout(function() {
+                saveImportedLayers();
+            }, 200);
+        }
+    });
+    
+    // Tombol Hapus Imported Layers
+    document.getElementById('btn-clear-imported').addEventListener('click', function() {
+        if (!window.drawnItems) {
+            alert('ℹ️ Tidak ada layers.');
+            return;
+        }
+        
+        // Hitung imported layers
+        var importedCount = 0;
+        window.drawnItems.eachLayer(function(layer) {
+            if (layer._isImported) {
+                importedCount++;
+            }
+        });
+        
+        if (importedCount === 0) {
+            alert('ℹ️ Tidak ada imported layers untuk dihapus.');
+            return;
+        }
+        
+        var confirmMsg = '⚠️ Hapus SEMUA imported layers?\n\n' +
+            'Total: ' + importedCount + ' layer dari file import akan dihapus.\n' +
+            '(Layer yang digambar manual tidak akan terhapus)\n\n' +
+            'Tindakan ini tidak dapat dibatalkan!';
+        
+        if (confirm(confirmMsg)) {
+            // Hapus hanya imported layers
+            var layersToRemove = [];
+            window.drawnItems.eachLayer(function(layer) {
+                if (layer._isImported) {
+                    layersToRemove.push(layer);
+                }
+            });
+            
+            layersToRemove.forEach(function(layer) {
+                window.drawnItems.removeLayer(layer);
+            });
+            
+            console.log('🗑️ All imported layers cleared:', importedCount, 'items deleted');
+            
+            // Clear IndexedDB
+            clearImportedLayersDB()
+                .then(function() {
+                    console.log('💾 IndexedDB cleared for imported layers');
+                    alert('✅ Berhasil menghapus ' + importedCount + ' imported layer!');
+                })
+                .catch(function(err) {
+                    console.error('❌ Error clearing IndexedDB:', err);
+                    alert('⚠️ Layer dihapus dari peta, tapi gagal menghapus dari database.\n\n' + err.message);
+                });
+        }
+    });
+    
+    // Tombol Test Storage - untuk debugging dan info IndexedDB
+    document.getElementById('btn-test-storage').addEventListener('click', function() {
+        console.log('🔍 ===== INDEXEDDB STORAGE TEST & INFO =====');
+        
+        var info = '🔍 STORAGE INFORMATION (IndexedDB)\n\n';
+        
+        // Cek IndexedDB support
+        if (!window.indexedDB) {
+            info += '❌ IndexedDB: NOT Supported\n\n';
+            info += 'Your browser does not support IndexedDB.\n';
+            info += 'Imported layers cannot be saved.\n\n';
+            info += 'Solution: Use a modern browser (Chrome, Firefox, Edge).';
+            alert(info);
+            return;
+        }
+        
+        info += '✅ IndexedDB: Supported\n\n';
+        
+        // Ambil data dari IndexedDB
+        getImportedLayersDB()
+            .then(function(layersData) {
+                if (layersData && layersData.length > 0) {
+                    info += '💾 Saved Data:\n';
+                    info += '   - Database: ' + DB_NAME + '\n';
+                    info += '   - Store: ' + LAYERS_STORE_NAME + '\n';
+                    info += '   - Layers: ' + layersData.length + '\n';
+                    
+                    var dataSize = JSON.stringify(layersData).length;
+                    info += '   - Size: ' + (dataSize / 1024).toFixed(2) + ' KB\n\n';
+                    
+                    // Detail per layer
+                    info += '📋 Layer Details:\n';
+                    layersData.forEach(function(layer, idx) {
+                        info += '   ' + (idx + 1) + '. ' + (layer.name || 'Unnamed') + '\n';
+                        info += '      Type: ' + layer.type + '\n';
+                        if (layer.coordinates) {
+                            info += '      Coords: ' + layer.coordinates.length + ' point(s)\n';
+                        }
+                        if (layer.source) {
+                            info += '      Source: ' + layer.source + '\n';
+                        }
+                    });
+                } else {
+                    info += '📊 Saved Data: None\n';
+                    info += '   (No imported layers saved yet)\n\n';
+                }
+                
+                // Cek current layers di map
+                var currentImported = 0;
+                var currentTotal = 0;
+                if (window.drawnItems) {
+                    window.drawnItems.eachLayer(function(layer) {
+                        currentTotal++;
+                        if (layer._isImported) currentImported++;
+                    });
+                }
+                
+                info += '\n🗺️ Current Map:\n';
+                info += '   - Total layers: ' + currentTotal + '\n';
+                info += '   - Imported layers: ' + currentImported + '\n';
+                info += '   - Manual layers: ' + (currentTotal - currentImported) + '\n\n';
+                
+                // Estimasi storage usage
+                return countImportedLayersDB().then(function(count) {
+                    info += '💿 Storage Info:\n';
+                    info += '   - Stored layers: ' + count + '\n';
+                    info += '   - Limit: ~50-100 MB+ (varies by browser)\n';
+                    info += '   - Storage type: IndexedDB (persistent)\n\n';
+                    
+                    info += '✅ Everything looks good!\n';
+                    info += 'Check browser console (F12) for details.';
+                    
+                    console.log('IndexedDB content:', layersData);
+                    console.log('Current drawnItems:', window.drawnItems);
+                    console.log('DB Name:', DB_NAME);
+                    console.log('Store Name:', LAYERS_STORE_NAME);
+                    
+                    alert(info);
+                });
+            })
+            .catch(function(err) {
+                info += '❌ ERROR: ' + err.message + '\n\n';
+                info += 'Check browser console (F12) for details.\n\n';
+                info += 'Possible causes:\n';
+                info += '- Private/Incognito mode\n';
+                info += '- Browser storage disabled\n';
+                info += '- IndexedDB quota exceeded';
+                
+                console.error('IndexedDB test error:', err);
+                alert(info);
+            });
+    });
+    
     document.getElementById('btn-gunakan-lokasi-sekarang').addEventListener('click', function() {
         console.log('🎯 Mengambil lokasi saat ini...');
         if (navigator.geolocation) {
@@ -920,6 +3106,12 @@ document.addEventListener('DOMContentLoaded', function() {
             this.textContent = '⏳ Mengambil lokasi...';
             this.disabled = true;
             var btnThis = this;
+            
+            // Show loading indicator
+            var lokasiLoadingInfo = document.getElementById('lokasi-loading-info');
+            var lokasiValidInfo = document.getElementById('lokasi-valid-info');
+            if (lokasiLoadingInfo) lokasiLoadingInfo.style.display = 'block';
+            if (lokasiValidInfo) lokasiValidInfo.style.display = 'none';
             
             navigator.geolocation.getCurrentPosition(function(pos) {
                 var lat = pos.coords.latitude.toFixed(6);
@@ -932,9 +3124,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Tambahkan marker di peta
                 if (window.drawnItems) {
                     var marker = L.marker([parseFloat(lat), parseFloat(lng)]);
-                    marker.on('dblclick', function() {
-                        window.drawnItems.removeLayer(marker);
-                    });
+                    if (window.attachDeleteEvents) {
+                        window.attachDeleteEvents(marker);
+                    }
                     window.drawnItems.addLayer(marker);
                 }
                 
@@ -947,6 +3139,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('geotag-info').style.display = 'block';
                 document.getElementById('geotag-warning').style.display = 'none';
                 
+                // Update indikator lokasi valid
+                var lokasiLatSpan = document.getElementById('lokasi-lat');
+                var lokasiLngSpan = document.getElementById('lokasi-lng');
+                if (lokasiValidInfo && lokasiLatSpan && lokasiLngSpan) {
+                    lokasiLatSpan.textContent = lat;
+                    lokasiLngSpan.textContent = lng;
+                    lokasiValidInfo.style.display = 'block';
+                }
+                // Hide loading indicator
+                if (lokasiLoadingInfo) lokasiLoadingInfo.style.display = 'none';
+                
                 // Reset button
                 btnThis.textContent = '📍 Gunakan Lokasi Saat Ini';
                 btnThis.disabled = false;
@@ -954,6 +3157,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('✅ Lokasi saat ini berhasil digunakan!\\nKoordinat: ' + lat + ', ' + lng);
             }, function(err) {
                 console.error('❌ Error mendapatkan lokasi:', err);
+                
+                // Hide loading indicator
+                if (lokasiLoadingInfo) lokasiLoadingInfo.style.display = 'none';
+                
                 alert('❌ Gagal mendapatkan lokasi!\\n\\nPastikan:\\n• GPS/Lokasi aktif\\n• Izin lokasi diberikan ke browser\\n• Akses melalui HTTPS atau localhost');
                 
                 // Reset button
@@ -1023,6 +3230,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     document.getElementById('ekspor-kml').onclick = eksporLokasiKML;
     document.getElementById('ekspor-excel').onclick = eksporLokasiExcel;
+    document.getElementById('ekspor-draw-kml').onclick = eksporDrawingKML;
+    document.getElementById('ekspor-draw-geojson').onclick = eksporDrawingGeoJSON;
     document.getElementById('backup-data').onclick = backupData;
     document.getElementById('restore-data').onclick = function() {
         document.getElementById('restore-file-input').click();
@@ -1035,6 +3244,67 @@ document.addEventListener('DOMContentLoaded', function() {
         window.print();
     };
 });
+
+// === AUTO-SAVE SEBELUM APLIKASI DITUTUP ===
+// Event listener untuk menyimpan data sebelum tab/window ditutup
+window.addEventListener('beforeunload', function(e) {
+    console.log('🚪 beforeunload triggered - saving imported layers...');
+    
+    // Simpan imported layers terakhir kali sebelum ditutup
+    if (typeof saveImportedLayers === 'function') {
+        try {
+            saveImportedLayers();
+            console.log('✅ Final save completed');
+        } catch (err) {
+            console.error('❌ Error during final save:', err);
+        }
+    }
+    
+    // Note: Tidak perlu return confirmasi karena akan mengganggu user experience
+});
+
+// Event listener untuk saat page visibility berubah (minimize, switch tab, dll)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        console.log('👁️ Page hidden - saving imported layers...');
+        
+        if (typeof saveImportedLayers === 'function') {
+            try {
+                saveImportedLayers();
+                console.log('✅ Save on visibility change completed');
+            } catch (err) {
+                console.error('❌ Error saving on visibility change:', err);
+            }
+        }
+    } else {
+        console.log('👁️ Page visible again');
+    }
+});
+
+// Periodic auto-save setiap 30 detik sebagai backup
+setInterval(function() {
+    if (typeof saveImportedLayers === 'function' && window.drawnItems) {
+        var importedCount = 0;
+        window.drawnItems.eachLayer(function(layer) {
+            if (layer._isImported) importedCount++;
+        });
+        
+        if (importedCount > 0) {
+            console.log('⏰ Periodic auto-save triggered...');
+            try {
+                saveImportedLayers();
+                console.log('✅ Periodic auto-save completed:', importedCount, 'imported layers');
+            } catch (err) {
+                console.error('❌ Error in periodic auto-save:', err);
+            }
+        }
+    }
+}, 30000); // Setiap 30 detik
+
+console.log('💾 Auto-save system initialized:');
+console.log('   - beforeunload: Save saat aplikasi ditutup');
+console.log('   - visibilitychange: Save saat tab di-minimize/switch');
+console.log('   - interval: Auto-save setiap 30 detik');
 
 function tampilkanFotoDiPeta(lat, lng, foto) {
     // Jangan hapus marker lain, hanya tambahkan marker baru
@@ -1117,6 +3387,7 @@ function handleFormSubmit(e) {
                 const req = store.put(surveyData);
                 req.onsuccess = () => {
                     setTimeout(renderTabelLokasi, 0);
+                    setTimeout(renderPolygonLayer, 0);
                     var lastKoordinat = document.getElementById('koordinat').value;
                     document.getElementById('form-lahan').reset();
                     document.getElementById('koordinat').value = lastKoordinat;
@@ -1132,6 +3403,7 @@ function handleFormSubmit(e) {
             addSurvey(surveyData)
                 .then(function() {
                     setTimeout(renderTabelLokasi, 0);
+                    setTimeout(renderPolygonLayer, 0);
                     var lastKoordinat = document.getElementById('koordinat').value;
                     document.getElementById('form-lahan').reset();
                     document.getElementById('koordinat').value = lastKoordinat;
@@ -1522,6 +3794,7 @@ function hapusSurvey(idx) {
     if(confirm('Hapus data ini?')) {
         deleteSurvey(idx).then(function() {
             renderTabelLokasi();
+            renderPolygonLayer();
         });
     }
 }
@@ -1531,23 +3804,48 @@ function eksporLokasiKML() {
     getAllSurvey().then(function(dataSurveyNow) {
         let kml = `<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n`;
         kml += `<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n`;
+        kml += `<name>Data Lokasi Survey</name>\n`;
+        
         dataSurveyNow.forEach(function(item) {
-            if(item.x && item.y) {
-                kml += `<Placemark>\n`;
-                kml += `<name>${item.nama||'Lokasi'}</name>\n`;
-                kml += `<description>${item.jenisKegiatan||''} - ${item.deskripsi||''}</description>\n`;
+            kml += `<Placemark>\n`;
+            kml += `<name>${item.nama||'Lokasi'}</name>\n`;
+            kml += `<description><![CDATA[`;
+            kml += `<b>Jenis Kegiatan:</b> ${item.jenisKegiatan||'-'}<br>`;
+            kml += `<b>Luas/Volume:</b> ${item.luas||'-'}<br>`;
+            kml += `<b>Gapoktan:</b> ${item.gapoktan||'-'}<br>`;
+            kml += `<b>Deskripsi:</b> ${item.deskripsi||'-'}`;
+            kml += `]]></description>\n`;
+            
+            // Cek apakah polygon atau point
+            if (item.koordinat && item.koordinat.includes('|')) {
+                // Polygon
+                var coords = item.koordinat.split('|').map(function(c) {
+                    var parts = c.trim().split(',');
+                    return parts[1] + ',' + parts[0] + ',0'; // lng,lat,alt
+                }).join(' ');
+                kml += `<Polygon>\n`;
+                kml += `<outerBoundaryIs><LinearRing>\n`;
+                kml += `<coordinates>${coords}</coordinates>\n`;
+                kml += `</LinearRing></outerBoundaryIs>\n`;
+                kml += `</Polygon>\n`;
+            } else if (item.x && item.y) {
+                // Point/Marker
                 kml += `<Point><coordinates>${item.y},${item.x},0</coordinates></Point>\n`;
-                kml += `</Placemark>\n`;
             }
+            
+            kml += `</Placemark>\n`;
         });
+        
         kml += `</Document>\n</kml>`;
         var blob = new Blob([kml], {type: 'application/vnd.google-earth.kml+xml'});
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
-        a.download = 'data_lokasi.kml';
+        a.download = 'data_lokasi_' + new Date().toISOString().split('T')[0] + '.kml';
         a.click();
         URL.revokeObjectURL(url);
+        
+        alert('✅ Ekspor KML berhasil!\\nFile berisi point dan polygon.');
     });
 }
 
@@ -1566,6 +3864,165 @@ function eksporLokasiExcel() {
         XLSX.utils.book_append_sheet(wb, ws, 'DataLokasi');
         XLSX.writeFile(wb, 'data_lokasi.xlsx');
     });
+}
+
+// Ekspor Drawing ke KML
+function eksporDrawingKML() {
+    if (!window.drawnItems || window.drawnItems.getLayers().length === 0) {
+        alert('❌ Tidak ada polygon atau marker yang digambar!\n\nGambar polygon/marker di peta terlebih dahulu.');
+        return;
+    }
+    
+    var layers = window.drawnItems.getLayers();
+    console.log('📤 Exporting', layers.length, 'drawn items to KML');
+    
+    var kml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    kml += `<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n`;
+    kml += `<name>Drawing Export</name>\n`;
+    kml += `<description>Exported from Peta Lokasi App on ${new Date().toLocaleString('id-ID')}</description>\n`;
+    
+    layers.forEach(function(layer, idx) {
+        kml += `<Placemark>\n`;
+        kml += `<name>Drawing ${idx + 1}</name>\n`;
+        kml += `<description>Drawn polygon/marker</description>\n`;
+        
+        if (layer instanceof L.Marker) {
+            // Point/Marker
+            var latlng = layer.getLatLng();
+            kml += `<Point>\n`;
+            kml += `<coordinates>${latlng.lng},${latlng.lat},0</coordinates>\n`;
+            kml += `</Point>\n`;
+        } else if (layer instanceof L.Polygon || layer instanceof L.Polyline) {
+            // Polygon or Polyline
+            var latlngs = layer.getLatLngs();
+            // Handle nested arrays (polygon)
+            var coords = [];
+            if (Array.isArray(latlngs[0])) {
+                coords = latlngs[0];
+            } else {
+                coords = latlngs;
+            }
+            
+            var coordString = coords.map(function(ll) {
+                return ll.lng + ',' + ll.lat + ',0';
+            }).join(' ');
+            
+            if (layer instanceof L.Polygon) {
+                kml += `<Polygon>\n`;
+                kml += `<outerBoundaryIs><LinearRing>\n`;
+                kml += `<coordinates>${coordString}</coordinates>\n`;
+                kml += `</LinearRing></outerBoundaryIs>\n`;
+                kml += `</Polygon>\n`;
+            } else {
+                kml += `<LineString>\n`;
+                kml += `<coordinates>${coordString}</coordinates>\n`;
+                kml += `</LineString>\n`;
+            }
+        }
+        
+        kml += `</Placemark>\n`;
+    });
+    
+    kml += `</Document>\n</kml>`;
+    
+    var blob = new Blob([kml], {type: 'application/vnd.google-earth.kml+xml'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'drawing_export_' + new Date().toISOString().split('T')[0] + '.kml';
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    alert('✅ Ekspor KML berhasil!\n\n' + layers.length + ' drawing telah diekspor.\n\nFile: ' + a.download);
+}
+
+// Ekspor Drawing ke GeoJSON
+function eksporDrawingGeoJSON() {
+    if (!window.drawnItems || window.drawnItems.getLayers().length === 0) {
+        alert('❌ Tidak ada polygon atau marker yang digambar!\n\nGambar polygon/marker di peta terlebih dahulu.');
+        return;
+    }
+    
+    var layers = window.drawnItems.getLayers();
+    console.log('📤 Exporting', layers.length, 'drawn items to GeoJSON');
+    
+    var features = [];
+    
+    layers.forEach(function(layer, idx) {
+        var feature = {
+            type: 'Feature',
+            properties: {
+                name: 'Drawing ' + (idx + 1),
+                description: 'Drawn polygon/marker',
+                exportDate: new Date().toISOString()
+            },
+            geometry: null
+        };
+        
+        if (layer instanceof L.Marker) {
+            // Point/Marker
+            var latlng = layer.getLatLng();
+            feature.geometry = {
+                type: 'Point',
+                coordinates: [latlng.lng, latlng.lat]
+            };
+        } else if (layer instanceof L.Polygon) {
+            // Polygon
+            var latlngs = layer.getLatLngs();
+            var coords = [];
+            if (Array.isArray(latlngs[0])) {
+                coords = latlngs[0];
+            } else {
+                coords = latlngs;
+            }
+            
+            var coordArray = coords.map(function(ll) {
+                return [ll.lng, ll.lat];
+            });
+            
+            // Close polygon if not closed
+            if (coordArray.length > 0 && 
+                (coordArray[0][0] !== coordArray[coordArray.length-1][0] || 
+                 coordArray[0][1] !== coordArray[coordArray.length-1][1])) {
+                coordArray.push(coordArray[0]);
+            }
+            
+            feature.geometry = {
+                type: 'Polygon',
+                coordinates: [coordArray]
+            };
+        } else if (layer instanceof L.Polyline) {
+            // LineString
+            var latlngs = layer.getLatLngs();
+            var coordArray = latlngs.map(function(ll) {
+                return [ll.lng, ll.lat];
+            });
+            
+            feature.geometry = {
+                type: 'LineString',
+                coordinates: coordArray
+            };
+        }
+        
+        if (feature.geometry) {
+            features.push(feature);
+        }
+    });
+    
+    var geojson = {
+        type: 'FeatureCollection',
+        features: features
+    };
+    
+    var blob = new Blob([JSON.stringify(geojson, null, 2)], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'drawing_export_' + new Date().toISOString().split('T')[0] + '.geojson';
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    alert('✅ Ekspor GeoJSON berhasil!\n\n' + features.length + ' drawing telah diekspor.\n\nFile: ' + a.download);
 }
 
 // Backup Data
@@ -1681,6 +4138,7 @@ function restoreData(e) {
             }).then(() => {
                 // Refresh tabel dan peta
                 setTimeout(renderTabelLokasi, 100);
+                setTimeout(renderPolygonLayer, 100);
                 alert(`Restore berhasil!\n${dataToRestore.length} data telah dipulihkan.`);
                 e.target.value = '';
             }).catch(err => {
