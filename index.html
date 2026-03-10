@@ -910,7 +910,8 @@ function clearImportedLayersDB() {
         </form>
 
         <!-- Tombol Cetak Laporan -->
-        <button type="button" id="cetak-laporan" style="margin-top:12px; font-size:12px; padding:2px 16px; min-width:120px; background:#8cbf7e; color:#253a2a; border-radius:8px; border:1px solid #a3a97a;">
+        <button type="button" id="cetak-laporan" style="margin-top:12px; font-size:12px; padding:2px 16px; min-width:120px; background:#8cbf7e; color:#253a2a; border-radius:8px; border:1px solid #a3a97a;"
+            onclick="window.print();">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" style="vertical-align:middle; margin-right:8px;">
                 <path d="M6 9V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <rect x="3" y="9" width="18" height="7" rx="2" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -919,31 +920,43 @@ function clearImportedLayersDB() {
             Cetak Laporan
         </button>
 
+        </button>
+
 
         <!-- ═══════════════════════════════════════════════════════════ -->
         <!-- STYLE UNTUK PRINT -->
         <!-- ═══════════════════════════════════════════════════════════ -->
         <style>
             @media print {
-                body * { 
-                    visibility: hidden !important; 
+                body * {
+                    visibility: hidden !important;
                 }
-                #judul-tabel-lokasi, #tabel-lokasi, #tabel-lokasi * { 
-                    visibility: visible !important; 
+                #judul-tabel-lokasi, #tabel-lokasi, #tabel-lokasi * {
+                    visibility: visible !important;
                 }
-                #judul-tabel-lokasi { 
-                    position: absolute; 
-                    left: 0; 
-                    top: 0; 
-                    width: 100vw; 
-                    text-align: center; 
-                    margin-bottom: 16px; 
+                #judul-tabel-lokasi {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100vw;
+                    text-align: center;
+                    margin-bottom: 16px;
                 }
-                #tabel-lokasi { 
-                    position: absolute; 
-                    left: 0; 
-                    top: 40px; 
-                    width: 100vw; 
+                #tabel-lokasi {
+                    position: absolute;
+                    left: 0;
+                    top: 40px;
+                    width: 100vw;
+                }
+                /* SEMBUNYIKAN SEMUA ELEMEN LEAFLET DAN TOOLBAR */
+                #map, .leaflet-container, .leaflet-control, .leaflet-draw, .leaflet-draw-toolbar, .leaflet-draw-actions, .leaflet-draw-actions-top, .leaflet-draw-actions-bottom, .leaflet-popup, .leaflet-pane, .leaflet-marker-icon, .leaflet-marker-shadow, .leaflet-tooltip, .leaflet-control-lokasi, .leaflet-control-attribution, .leaflet-control-zoom, .leaflet-control-layers, .leaflet-control-container, .leaflet-top, .leaflet-bottom, .leaflet-left, .leaflet-right, .leaflet-bar, .leaflet-draw-edit-edit, .leaflet-draw-edit-remove, .leaflet-draw-toolbar-top, .leaflet-draw-toolbar-bottom, .leaflet-draw-toolbar-notouch, .leaflet-draw-toolbar-touch, .leaflet-draw-toolbar, .leaflet-draw-toolbar *, .leaflet-draw-actions *, .leaflet-draw-actions-top *, .leaflet-draw-actions-bottom *, .leaflet-popup-content, .leaflet-popup-tip, .leaflet-popup-close-button, .leaflet-marker-pane, .leaflet-shadow-pane, .leaflet-overlay-pane, .leaflet-tooltip-pane, .leaflet-pane, .leaflet-control-layers-list, .leaflet-control-layers-expanded, .leaflet-control-layers-selector, .leaflet-control-layers-separator, .leaflet-control-layers-base, .leaflet-control-layers-overlays, .leaflet-control-layers-label, .leaflet-control-layers-toggle, .leaflet-control-layers, .leaflet-control-layers *, .leaflet-control *, .leaflet-bar *, .leaflet-control-attribution *, .leaflet-control-zoom *, .leaflet-control-lokasi *, .leaflet-control-container *, .leaflet-top *, .leaflet-bottom *, .leaflet-left *, .leaflet-right *, .leaflet-bar *, .leaflet-draw-edit-edit *, .leaflet-draw-edit-remove *, .leaflet-draw-toolbar-top *, .leaflet-draw-toolbar-bottom *, .leaflet-draw-toolbar-notouch *, .leaflet-draw-toolbar-touch *, .leaflet-draw-toolbar *, .leaflet-draw-actions *, .leaflet-draw-actions-top *, .leaflet-draw-actions-bottom *, .leaflet-popup-content *, .leaflet-popup-tip *, .leaflet-popup-close-button *, .leaflet-marker-pane *, .leaflet-shadow-pane *, .leaflet-overlay-pane *, .leaflet-tooltip-pane *, .leaflet-pane *, .leaflet-control-layers-list *, .leaflet-control-layers-expanded *, .leaflet-control-layers-selector *, .leaflet-control-layers-separator *, .leaflet-control-layers-base *, .leaflet-control-layers-overlays *, .leaflet-control-layers-label *, .leaflet-control-layers-toggle * {
+                    display: none !important;
+                    visibility: hidden !important;
+                }
+                /* Hapus background merah/biru pada print */
+                th, td {
+                    background: #fff !important;
+                    color: #222 !important;
                 }
             }
         </style>
@@ -2904,107 +2917,109 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btn-kamera').addEventListener('click', function() {
         document.getElementById('kamera-capture').click();
     });
-    document.getElementById('kamera-capture').addEventListener('change', function(e) {
-        var file = this.files && this.files[0];
-        if(file) {
-            // Pindahkan file hasil kamera ke input utama
-            var dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            var fotoInput = document.getElementById('foto');
-            fotoInput.files = dataTransfer.files;
-            // Trigger event change agar proses sama seperti upload biasa
-            var event = new Event('change', { bubbles: true });
-            fotoInput.dispatchEvent(event);
-        }
-    });
-    // Tombol "Gunakan Lokasi Saat Ini" untuk Android
-    // Import polygon file handler
-    document.getElementById('import-polygon').addEventListener('change', function(e) {
-        var file = this.files && this.files[0];
-        if (file) {
-            importPolygonFile(file);
-            // Reset input setelah import
-            this.value = '';
-        }
-    });
-    
-    // Tombol Hapus Semua Drawing
-    document.getElementById('btn-hapus-semua-drawing').addEventListener('click', function() {
-        if (!window.drawnItems || window.drawnItems.getLayers().length === 0) {
-            alert('ℹ️ Tidak ada drawing untuk dihapus.');
-            return;
-        }
-        
-        var count = window.drawnItems.getLayers().length;
-        var confirmMsg = '⚠️ Hapus SEMUA drawing?\n\n' +
-            'Total: ' + count + ' polygon/marker akan dihapus.\n\n' +
-            'Tindakan ini tidak dapat dibatalkan!';
-        
-        if (confirm(confirmMsg)) {
-            window.drawnItems.clearLayers();
-            document.getElementById('koordinat').value = '';
-            console.log('🗑️ All drawings cleared:', count, 'items deleted');
-            alert('✅ Berhasil menghapus ' + count + ' drawing!');
-            
-            // Update localStorage
-            setTimeout(function() {
-                saveImportedLayers();
-            }, 200);
-        }
-    });
-    
-    // Tombol Hapus Imported Layers
-    document.getElementById('btn-clear-imported').addEventListener('click', function() {
-        if (!window.drawnItems) {
-            alert('ℹ️ Tidak ada layers.');
-            return;
-        }
-        
-        // Hitung imported layers
-        var importedCount = 0;
-        window.drawnItems.eachLayer(function(layer) {
-            if (layer._isImported) {
-                importedCount++;
+    var kameraCapture = document.getElementById('kamera-capture');
+    if (kameraCapture) {
+        kameraCapture.addEventListener('change', function(e) {
+            var file = this.files && this.files[0];
+            if(file) {
+                // Pindahkan file hasil kamera ke input utama
+                var dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                var fotoInput = document.getElementById('foto');
+                fotoInput.files = dataTransfer.files;
+                // Trigger event change agar proses sama seperti upload biasa
+                var event = new Event('change', { bubbles: true });
+                fotoInput.dispatchEvent(event);
             }
         });
-        
-        if (importedCount === 0) {
-            alert('ℹ️ Tidak ada imported layers untuk dihapus.');
-            return;
-        }
-        
-        var confirmMsg = '⚠️ Hapus SEMUA imported layers?\n\n' +
-            'Total: ' + importedCount + ' layer dari file import akan dihapus.\n' +
-            '(Layer yang digambar manual tidak akan terhapus)\n\n' +
-            'Tindakan ini tidak dapat dibatalkan!';
-        
-        if (confirm(confirmMsg)) {
-            // Hapus hanya imported layers
-            var layersToRemove = [];
+    }
+    // Tombol "Gunakan Lokasi Saat Ini" untuk Android
+    // Import polygon file handler
+    var importPolygon = document.getElementById('import-polygon');
+    if (importPolygon) {
+        importPolygon.addEventListener('change', function(e) {
+            var file = this.files && this.files[0];
+            if (file) {
+                importPolygonFile(file);
+                // Reset input setelah import
+                this.value = '';
+            }
+        });
+    }
+    
+    // Tombol Hapus Semua Drawing
+    var btnHapusSemua = document.getElementById('btn-hapus-semua-drawing');
+    if (btnHapusSemua) {
+        btnHapusSemua.addEventListener('click', function() {
+            if (!window.drawnItems || window.drawnItems.getLayers().length === 0) {
+                alert('ℹ️ Tidak ada drawing untuk dihapus.');
+                return;
+            }
+            var count = window.drawnItems.getLayers().length;
+            var confirmMsg = '⚠️ Hapus SEMUA drawing?\n\n' +
+                'Total: ' + count + ' polygon/marker akan dihapus.\n\n' +
+                'Tindakan ini tidak dapat dibatalkan!';
+            if (confirm(confirmMsg)) {
+                window.drawnItems.clearLayers();
+                document.getElementById('koordinat').value = '';
+                console.log('🗑️ All drawings cleared:', count, 'items deleted');
+                alert('✅ Berhasil menghapus ' + count + ' drawing!');
+                // Update localStorage
+                setTimeout(function() {
+                    saveImportedLayers();
+                }, 200);
+            }
+        });
+    }
+    
+    // Tombol Hapus Imported Layers
+    var btnClearImported = document.getElementById('btn-clear-imported');
+    if (btnClearImported) {
+        btnClearImported.addEventListener('click', function() {
+            if (!window.drawnItems) {
+                alert('ℹ️ Tidak ada layers.');
+                return;
+            }
+            // Hitung imported layers
+            var importedCount = 0;
             window.drawnItems.eachLayer(function(layer) {
                 if (layer._isImported) {
-                    layersToRemove.push(layer);
+                    importedCount++;
                 }
             });
-            
-            layersToRemove.forEach(function(layer) {
-                window.drawnItems.removeLayer(layer);
-            });
-            
-            console.log('🗑️ All imported layers cleared:', importedCount, 'items deleted');
-            
-            // Clear IndexedDB
-            clearImportedLayersDB()
-                .then(function() {
-                    console.log('💾 IndexedDB cleared for imported layers');
-                    alert('✅ Berhasil menghapus ' + importedCount + ' imported layer!');
-                })
-                .catch(function(err) {
-                    console.error('❌ Error clearing IndexedDB:', err);
-                    alert('⚠️ Layer dihapus dari peta, tapi gagal menghapus dari database.\n\n' + err.message);
+            if (importedCount === 0) {
+                alert('ℹ️ Tidak ada imported layers untuk dihapus.');
+                return;
+            }
+            var confirmMsg = '⚠️ Hapus SEMUA imported layers?\n\n' +
+                'Total: ' + importedCount + ' layer dari file import akan dihapus.\n' +
+                '(Layer yang digambar manual tidak akan terhapus)\n\n' +
+                'Tindakan ini tidak dapat dibatalkan!';
+            if (confirm(confirmMsg)) {
+                // Hapus hanya imported layers
+                var layersToRemove = [];
+                window.drawnItems.eachLayer(function(layer) {
+                    if (layer._isImported) {
+                        layersToRemove.push(layer);
+                    }
                 });
-        }
-    });
+                layersToRemove.forEach(function(layer) {
+                    window.drawnItems.removeLayer(layer);
+                });
+                console.log('🗑️ All imported layers cleared:', importedCount, 'items deleted');
+                // Clear IndexedDB
+                clearImportedLayersDB()
+                    .then(function() {
+                        console.log('💾 IndexedDB cleared for imported layers');
+                        alert('✅ Berhasil menghapus ' + importedCount + ' imported layer!');
+                    })
+                    .catch(function(err) {
+                        console.error('❌ Error clearing IndexedDB:', err);
+                        alert('⚠️ Layer dihapus dari peta, tapi gagal menghapus dari database.\n\n' + err.message);
+                    });
+            }
+        });
+    }
     
     // Tombol Test Storage - untuk debugging dan info IndexedDB
     document.getElementById('btn-test-storage').addEventListener('click', function() {
@@ -3237,12 +3252,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('restore-file-input').click();
     };
     document.getElementById('restore-file-input').addEventListener('change', restoreData);
-    document.getElementById('cetak-laporan').onclick = function() {
-        window.print();
-    };
-    document.getElementById('cetak-laporan').onclick = function() {
-        window.print();
-    };
+    // (handler cetak laporan dihapus, cukup gunakan onclick di HTML saja)
 });
 
 // === AUTO-SAVE SEBELUM APLIKASI DITUTUP ===
