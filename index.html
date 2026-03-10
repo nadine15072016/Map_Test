@@ -742,58 +742,47 @@ function clearImportedLayersDB() {
 
         <!-- Form Input Data Survey Lokasi -->
         <form id="form-lahan">
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <!-- BAGIAN 1: KLASIFIKASI -->
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <label style="font-size:12px;">
-                Jenis Kegiatan
-                <select id="jenis-kegiatan" required style="font-size:12px;">
-                    <option value="">-- Pilih Kegiatan --</option>
-                    <option value="Irigasi">Irigasi</option>
-                    <option value="Embung">Embung</option>
-                    <option value="Perpipaan">Perpipaan</option>
-                    <option value="Lainnya">Lainnya</option>
-                </select>
-            </label>
-
-            <label style="font-size:12px;">
-                Tanggal Kegiatan
-                <input type="date" id="tanggal-kegiatan" required style="font-size:12px;">
-            </label>
-
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <!-- BAGIAN 2: IDENTIFIKASI -->
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <label style="font-size:12px;">
-                Nama Lokasi/Kegiatan
-                <input type="text" id="nama" required placeholder="Contoh: Irigasi Desa X" style="font-size:12px;">
-            </label>
-
-            <label style="font-size:12px;">
-                Nama Gapoktan atau Kelompok Tani
-                <input type="text" id="gapoktan" placeholder="Masukkan nama Gapoktan atau Kelompok Tani" style="font-size:12px;" autocomplete="off">
-            </label>
-
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <!-- BAGIAN 3: PENGUKURAN & DESKRIPSI -->
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <label style="font-size:12px;">
-                Luas (ha) / Volume
-                <input type="text" id="luas" required placeholder="Contoh: 1.25 atau 100m3" style="font-size:12px;">
-            </label>
-
-            <label style="font-size:12px;">
-                Deskripsi
-                <input type="text" id="deskripsi" placeholder="Keterangan tambahan" style="font-size:12px;">
-            </label>
-
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <!-- BAGIAN 4: LOKASI -->
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <label style="font-size:12px;">
-                Koordinat/Polygon
+            <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <div style="flex:1 1 220px; min-width:220px; max-width:340px;">
+                    <label style="font-size:12px; font-weight:600;">Jenis Kegiatan</label>
+                    <select id="jenis-kegiatan" required style="font-size:12px; width:100%; margin-bottom:6px;" onchange="document.getElementById('jenis-kegiatan-lainnya').style.display = (this.value === 'Lainnya' ? 'inline-block' : 'none'); document.getElementById('jenis-kegiatan-lainnya').required = (this.value === 'Lainnya');">
+                        <option value="">-- Pilih Kegiatan --</option>
+                        <option value="Irigasi">Irigasi</option>
+                        <option value="Embung">Embung</option>
+                        <option value="Perpipaan">Perpipaan</option>
+                        <option value="Lainnya">Lainnya</option>
+                    </select>
+                    <input type="text" id="jenis-kegiatan-lainnya" placeholder="Tulis jenis kegiatan..." style="display:none; margin-bottom:6px; font-size:12px; width:100%;" />
+                </div>
+                <div style="flex:1 1 180px; min-width:180px; max-width:220px;">
+                    <label style="font-size:12px; font-weight:600;">Tanggal Kegiatan</label>
+                    <input type="date" id="tanggal-kegiatan" required style="font-size:12px; width:100%;">
+                </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top:8px;">
+                <div style="flex:1 1 220px; min-width:220px; max-width:340px;">
+                    <label style="font-size:12px; font-weight:600;">Nama Lokasi/Kegiatan</label>
+                    <input type="text" id="nama" required placeholder="Contoh: Irigasi Desa X" style="font-size:12px; width:100%;">
+                </div>
+                <div style="flex:1 1 220px; min-width:220px; max-width:340px;">
+                    <label style="font-size:12px; font-weight:600;">Nama Gapoktan atau Kelompok Tani</label>
+                    <input type="text" id="gapoktan" placeholder="Masukkan nama Gapoktan atau Kelompok Tani" style="font-size:12px; width:100%;" autocomplete="off">
+                </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top:8px;">
+                <div style="flex:1 1 180px; min-width:180px; max-width:220px;">
+                    <label style="font-size:12px; font-weight:600;">Luas (ha) / Volume</label>
+                    <input type="text" id="luas" required placeholder="Contoh: 1.25 atau 100m3" style="font-size:12px; width:100%;">
+                </div>
+                <div style="flex:1 1 220px; min-width:220px; max-width:340px;">
+                    <label style="font-size:12px; font-weight:600;">Deskripsi</label>
+                    <input type="text" id="deskripsi" placeholder="Keterangan tambahan" style="font-size:12px; width:100%;">
+                </div>
+            </div>
+            <div style="margin-top:8px;">
+                <label style="font-size:12px; font-weight:600;">Koordinat/Polygon</label>
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="text" id="koordinat" readonly required placeholder="Klik atau gambar di peta" style="font-size:12px;">
+                    <input type="text" id="koordinat" readonly required placeholder="-2.026291,101.378033" style="font-size:12px; width:180px;">
                     <button type="button" id="btn-bersihkan-koordinat" style="font-size:11px; padding:4px 10px; background:#e53935; color:#fff; border:none; border-radius:5px; cursor:pointer;">
                         Bersihkan
                     </button>
@@ -801,10 +790,9 @@ function clearImportedLayersDB() {
                 <small style="color:#b00; font-size:11px;">
                     Jika gagal mendapatkan lokasi: pastikan izin lokasi aktif, akses melalui HTTPS, dan coba refresh browser Anda.
                 </small>
-            </label>
-
-            <label style="font-size:12px;">
-                Import Polygon dari File
+            </div>
+            <div style="margin-top:8px;">
+                <label style="font-size:12px; font-weight:600;">Import Polygon dari File</label>
                 <input type="file" id="import-polygon" accept=".kml,.kmz,.geojson,.json,.shp,.zip" style="font-size:12px;">
                 <small style="color:#666; display:block; font-size:10.5px; margin-top:3px;">
                     • Format: <strong>KML, KMZ</strong> (Google Earth), <strong>GeoJSON</strong>, <strong>Shapefile (ZIP)</strong>
@@ -821,13 +809,9 @@ function clearImportedLayersDB() {
                         🔍 Test Storage
                     </button>
                 </div>
-            </label>
-
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <!-- BAGIAN 5: DOKUMENTASI -->
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <label style="font-size:12px;">
-                Foto Lokasi
+            </div>
+            <div style="margin-top:8px;">
+                <label style="font-size:12px; font-weight:600;">Foto Lokasi</label>
                 <input type="file" id="foto" accept="image/*" style="font-size:12px;">
                 <small style="color:#666; display:block; font-size:10.5px; margin-top:3px;">
                     • Jika tetap gagal: <strong>klik "Gunakan Lokasi Saat Ini"</strong> atau klik manual di peta
@@ -842,15 +826,12 @@ function clearImportedLayersDB() {
                         📍 Gunakan Lokasi Saat Ini
                     </button>
                 </div>
-                
-                <!-- Indikator Status Lokasi Valid -->
                 <small id="lokasi-valid-info" style="color:#2a7a3a; display:none; font-size:11px; font-weight:600; margin-top:6px; padding:6px 10px; background:#e8f5e9; border-left:3px solid #4caf50; border-radius:4px;">
                     ✅ Lokasi valid terdeteksi! (Lat: <span id="lokasi-lat">-</span>, Lng: <span id="lokasi-lng">-</span>)
                 </small>
                 <small id="lokasi-loading-info" style="color:#1976d2; display:none; font-size:11px; font-weight:600; margin-top:6px; padding:6px 10px; background:#e3f2fd; border-left:3px solid #2196f3; border-radius:4px;">
                     ⏳ Mendeteksi lokasi...
                 </small>
-                
                 <input type="file" id="kamera-capture" accept="image/*" capture="environment" style="display:none; font-size:12px;">
                 <small id="geotag-info" style="color:#2a7a3a; display:none; font-size:11px; font-weight:600; margin-top:4px;">
                     ✅ Koordinat dari foto berhasil dibaca!
@@ -859,20 +840,11 @@ function clearImportedLayersDB() {
                     ⚠️ Foto tidak memiliki data GPS.<br>
                     <strong>Solusi Android:</strong> Klik tombol "Gunakan Lokasi Saat Ini" atau klik manual di peta.
                 </small>
-            </label>
-
-
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <!-- TOMBOL AKSI FORM -->
-            <!-- ═══════════════════════════════════════════════════════════ -->
-            <div class="form-actions">
-                <button type="submit" style="font-size:12px;">
-                    Simpan
-                </button>
+            </div>
+            <div class="form-actions" style="display:flex; gap:10px; margin-top:18px; align-items:center; flex-wrap:wrap;">
+                <button type="submit" style="font-size:12px; min-width:90px;">Simpan</button>
                 <div class="dropdown-ekspor" style="display:inline-block; position:relative;">
-                    <button type="button" id="btn-ekspor-group" style="font-size:12px; padding:2px 16px; min-width:120px;">
-                        Ekspor Data ▼
-                    </button>
+                    <button type="button" id="btn-ekspor-group" style="font-size:12px; padding:2px 16px; min-width:120px;">Ekspor Data ▼</button>
                     <div id="menu-ekspor" style="display:none; position:absolute; z-index:10; min-width:165px; background:#fff; border:1px solid #ccc; border-radius:8px; box-shadow:0 3px 10px rgba(0,0,0,0.12); top:110%; left:0; padding:4px 0;">
                         <div style="padding:5px 10px; font-size:10px; color:#888; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; border-bottom:1px solid #eee; margin-bottom:2px;">
                             Ekspor Data Tersimpan
@@ -905,22 +877,20 @@ function clearImportedLayersDB() {
                         </button>
                     </div>
                 </div>
+                <button type="button" id="cetak-laporan" style="margin-top:0; font-size:12px; padding:2px 16px; min-width:120px; background:#8cbf7e; color:#253a2a; border-radius:8px; border:1px solid #a3a97a;" onclick="window.print();">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" style="vertical-align:middle; margin-right:8px;">
+                        <path d="M6 9V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <rect x="3" y="9" width="18" height="7" rx="2" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M6 16v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Cetak Laporan
+                </button>
                 <input type="file" id="restore-file-input" accept=".json" style="display:none;">
             </div>
         </form>
 
-        <!-- Tombol Cetak Laporan -->
-        <button type="button" id="cetak-laporan" style="margin-top:12px; font-size:12px; padding:2px 16px; min-width:120px; background:#8cbf7e; color:#253a2a; border-radius:8px; border:1px solid #a3a97a;"
-            onclick="window.print();">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" style="vertical-align:middle; margin-right:8px;">
-                <path d="M6 9V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <rect x="3" y="9" width="18" height="7" rx="2" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M6 16v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4" stroke="#253a2a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Cetak Laporan
-        </button>
 
-        </button>
+
 
 
         <!-- ═══════════════════════════════════════════════════════════ -->
@@ -3340,7 +3310,10 @@ function tampilkanFotoDiPeta(lat, lng, foto) {
 
 function handleFormSubmit(e) {
     if(e) e.preventDefault();
-    const jenisKegiatan = document.getElementById('jenis-kegiatan').value.trim();
+    var jenisKegiatan = document.getElementById('jenis-kegiatan').value.trim();
+    if (jenisKegiatan === 'Lainnya') {
+        jenisKegiatan = document.getElementById('jenis-kegiatan-lainnya').value.trim();
+    }
     const tanggalKegiatan = document.getElementById('tanggal-kegiatan').value.trim();
     const nama = document.getElementById('nama').value.trim();
     const gapoktan = document.getElementById('gapoktan').value.trim();
